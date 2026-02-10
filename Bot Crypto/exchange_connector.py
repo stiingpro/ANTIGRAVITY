@@ -118,10 +118,6 @@ class ExchangeConnector:
         self.api_key = api_key
         self.api_secret = api_secret
         
-        # Credenciales manuales o cargar de env
-        self.api_key = api_key
-        self.api_secret = api_secret
-        
         if not self.api_key or not self.api_secret:
             self._load_credentials()
         
@@ -133,7 +129,7 @@ class ExchangeConnector:
         logger.info(f"   API URL: {self.config['api_url']}")
     
     def _load_credentials(self) -> None:
-        """Carga las credenciales desde el archivo .env correspondiente."""
+        """Carga las credenciales desde el archivo .env correspondiente o intenta fallbacks."""
         
         # Determinar qué archivo .env cargar
         if self.environment == 'testnet':
@@ -143,23 +139,39 @@ class ExchangeConnector:
             env_file = '.env.production'
             key_prefix = self.motor
         
-        # Cargar archivo .env
+        # Cargar archivo .env local si existe
         env_path = os.path.join(os.path.dirname(__file__), env_file)
-        
         if os.path.exists(env_path):
             load_dotenv(env_path)
             logger.info(f"✅ Cargado: {env_file}")
-        else:
-            logger.warning(f"⚠️ Archivo no encontrado: {env_file}")
-            logger.warning(f"   Buscando en variables de entorno...")
         
-        # Obtener credenciales
-        self.api_key = os.getenv(f'{key_prefix}_API_KEY')
-        self.api_secret = os.getenv(f'{key_prefix}_API_SECRET')
+        # Estrategia de búsqueda de credenciales (Cascada)
+        # 1. Prefijo específico (ej. TRIFECTA_TESTNET)
+        # 2. Fallback a B1 (ej. B1_TESTNET)
+        # 3. Fallback a Genericos (BINANCE)
+        # 4. Fallback Cruzado (ej. probar Production keys si estamos en Testnet y viceversa, como último recurso desesperado)
         
-        if not self.api_key or not self.api_secret:
-            logger.error(f"❌ Credenciales no encontradas para {key_prefix}")
-            raise ValueError(f"Missing credentials for {key_prefix}")
+        candidates = [
+            key_prefix,                          # TRIFECTA_TESTNET
+            f'B1_{"TESTNET" if "TESTNET" in key_prefix else ""}'.rstrip("_"), # B1_TESTNET
+            'BINANCE',                           # BINANCE
+            'B1',                                # B1 (Prod key usada en testnet?)
+            'B2_TESTNET',
+            'B3_TESTNET'
+        ]
+        
+        for candidate in candidates:
+            k = os.getenv(f'{candidate}_API_KEY')
+            s = os.getenv(f'{candidate}_API_SECRET')
+            if k and s:
+                self.api_key = k
+                self.api_secret = s
+                logger.info(f"🔑 Credenciales encontradas usando: {candidate}")
+                return
+
+        # Si llegamos aquí, falló todo
+        logger.error(f"❌ Credenciales NO encontradas. Se probaron: {candidates}")
+        raise ValueError(f"Missing credentials for {key_prefix} and all fallbacks")
     
     def connect(self) -> bool:
         """
