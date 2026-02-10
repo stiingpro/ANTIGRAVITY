@@ -2,9 +2,8 @@
 asyncio
 aiohttp
 python-dotenv
-pandas==1.5.3
-numpy==1.24.3
-pandas-ta
+pandas>=2.0.0
+numpy>=1.24.0
 
 # Binance
 binance-futures-connector>=3.0.0

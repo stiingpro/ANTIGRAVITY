@@ -1,32 +1,18 @@
-
 import asyncio
 import pandas as pd
-import pandas_ta as ta
+import numpy as np
 import logging
 from datetime import datetime, timedelta
+import json
+import os
+import glob
 from engines.b3_anchor.strategy import B3Strategy
 from engines.b3_anchor.risk_manager import B3RiskManager
+import core.indicators as ind
 
 # Config
 LOG_LEVEL = logging.INFO
 logging.basicConfig(level=LOG_LEVEL, format='%(asctime)s - %(message)s')
-logger = logging.getLogger('B3_BACKTEST')
-
-
-import json
-import os
-import glob
-import logging
-import asyncio
-import pandas as pd
-import pandas_ta as ta
-import numpy as np
-from datetime import datetime
-from engines.b3_anchor.strategy import B3Strategy
-from engines.b3_anchor.risk_manager import B3RiskManager
-
-# Config
-logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger('B3_BACKTEST')
 
 DATA_DIR = r'd:\ANTIGRAVITY\Bot Crypto\backtest_data'
@@ -179,14 +165,14 @@ class BacktestEngine:
                 # LOGIC INLINE FOR BACKTEST SPEED:
                 
                 # 1. Macro Filter
-                ema200_daily = ta.ema(slice_1d['close'], length=200).iloc[-1]
+                ema200_daily = ind.calculate_ema(slice_1d['close'], period=200).iloc[-1]
                 close_4h = slice_4h['close'].iloc[-1]
                 
                 if close_4h < ema200_daily: continue # Bear Market
                 
                 # 2. Golden Cross 4H
-                ema50 = ta.ema(slice_4h['close'], length=50)
-                ema200 = ta.ema(slice_4h['close'], length=200)
+                ema50 = ind.calculate_ema(slice_4h['close'], period=50)
+                ema200 = ind.calculate_ema(slice_4h['close'], period=200)
                 if len(ema50) < 2 or len(ema200) < 2: continue
                 
                 cross_up = (ema50.iloc[-2] <= ema200.iloc[-2]) and (ema50.iloc[-1] > ema200.iloc[-1])
@@ -209,7 +195,7 @@ class BacktestEngine:
                             
                 elif cross_up:
                     # Entry
-                    atr = ta.atr(slice_4h['high'], slice_4h['low'], slice_4h['close'], length=14).iloc[-1]
+                    atr = ind.calculate_atr(slice_4h['high'], slice_4h['low'], slice_4h['close'], period=14).iloc[-1]
                     sl = close_4h - (atr * 3.0)
                     tp = close_4h + (atr * 6.0) # Risk 1:2
                     self._open_position(sym, close_4h, sl, tp)

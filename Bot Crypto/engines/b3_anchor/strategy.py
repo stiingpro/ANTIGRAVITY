@@ -1,5 +1,5 @@
 import pandas as pd
-import pandas_ta as ta
+
 from typing import Dict, Optional
 from collections import namedtuple
 
@@ -24,6 +24,8 @@ class B3Strategy:
         self.atr_period = config.get('atr_period', 14)
         
     def analyze(self, data_4h: Dict, data_1d: Dict) -> Optional[TradeSignal]:
+        import core.indicators as ind
+        
         symbol = data_4h['symbol']
         
         # 1. Preparar DataFrames
@@ -35,7 +37,7 @@ class B3Strategy:
             
         # 2. Macro Trend Filter (1D)
         # Solo operar LONG si estamos sobre la EMA 200 Diaria
-        macro_ema_200 = ta.ema(df_1d['close'], length=200).iloc[-1]
+        macro_ema_200 = ind.calculate_ema(df_1d['close'], self.ema_slow).iloc[-1]
         current_price = df_4h['close'].iloc[-1]
         
         if current_price < macro_ema_200:
@@ -43,20 +45,21 @@ class B3Strategy:
             
         # 3. Indicadores 4H
         # EMA Cross
-        ema_fast = ta.ema(df_4h['close'], length=self.ema_fast)
-        ema_slow = ta.ema(df_4h['close'], length=self.ema_slow)
+        ema_fast_series = ind.calculate_ema(df_4h['close'], self.ema_fast)
+        ema_slow_series = ind.calculate_ema(df_4h['close'], self.ema_slow)
         
         # Bollinger Bands (para agotamiento)
-        bb = ta.bbands(df_4h['close'], length=self.bb_period, std=self.bb_std)
+        bb_upper, _, _ = ind.calculate_bbands(df_4h['close'], self.bb_period, self.bb_std)
         
         # ATR (para SL/TP)
-        atr_val = ta.atr(df_4h['high'], df_4h['low'], df_4h['close'], length=self.atr_period).iloc[-1]
+        atr_series = ind.calculate_atr(df_4h['high'], df_4h['low'], df_4h['close'], self.atr_period)
+        atr_val = atr_series.iloc[-1]
         
         # Valores actuales y previos
-        curr_fast = ema_fast.iloc[-1]
-        curr_slow = ema_slow.iloc[-1]
-        prev_fast = ema_fast.iloc[-2]
-        prev_slow = ema_slow.iloc[-2]
+        curr_fast = ema_fast_series.iloc[-1]
+        curr_slow = ema_slow_series.iloc[-1]
+        prev_fast = ema_fast_series.iloc[-2]
+        prev_slow = ema_slow_series.iloc[-2]
         
         # 4. Señal de Entrada (Golden Cross 4H)
         # Cruce alcista: Fast cruza arriba de Slow
@@ -83,8 +86,8 @@ class B3Strategy:
         # aunque el motor maneja TP/SL, la estrategia puede sugerir cierre anticipado)
         # Death Cross o Exhaustion
         death_cross = (prev_fast >= prev_slow) and (curr_fast < curr_slow)
-        bb_upper = bb[f'BBU_{self.bb_period}_{self.bb_std}'].iloc[-1]
-        exhaustion = current_price > bb_upper # Precio rompió banda superior con fuerza
+        bb_u = bb_upper.iloc[-1]
+        exhaustion = current_price > bb_u # Precio rompió banda superior con fuerza
         
         if death_cross:
             return TradeSignal(symbol, 'EXIT_LONG', current_price, 0, 0, 'Death Cross 4H', 1.0)
@@ -93,6 +96,7 @@ class B3Strategy:
             return TradeSignal(symbol, 'EXIT_LONG', current_price, 0, 0, 'Bollinger Exhaustion', 0.8)
             
         return None
+
 
     def _prepare_df(self, klines):
         df = pd.DataFrame(klines, columns=[
