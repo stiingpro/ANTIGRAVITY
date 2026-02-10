@@ -4,8 +4,7 @@ aiohttp
 python-dotenv
 pandas==1.5.3
 numpy==1.24.3
-# pandas-ta (ZIP Method)
-https://github.com/twopirllc/pandas-ta/archive/development.zip
+pandas-ta
 
 # Binance
 binance-futures-connector>=3.0.0
