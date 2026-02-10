@@ -1,0 +1,42 @@
+{
+  "phase": "A - Optimization Walk-Forward",
+  "period": "2023-01-01 to 2026-02-10",
+  "config": {
+    "label": "V6-DualTF",
+    "initial_balance": 1000.0,
+    "ema_fast": 20,
+    "ema_slow": 50,
+    "ema_macro": 200,
+    "rsi_period": 14,
+    "rsi_long_min": 40,
+    "rsi_long_max": 70,
+    "rsi_short_min": 30,
+    "rsi_short_max": 60,
+    "rsi_div_lookback": 5,
+    "atr_period": 14,
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 4.0,
+    "position_size_pct": 3.0,
+    "leverage": 5,
+    "min_leverage": 3,
+    "max_leverage": 5,
+    "commission_pct": 0.04,
+    "cooldown_candles": 6,
+    "max_consecutive_losses": 3,
+    "min_strength": 0.55,
+    "vol_threshold": 0.8
+  },
+  "stats": {
+    "trades": 3298,
+    "wr": 59.58156458459673,
+    "pnl": 462.3101242693188,
+    "pf": 1.0992305062644443,
+    "dd": 7.88475260627251,
+    "final": 1462.3101242693187,
+    "roi": 46.23101242693187,
+    "sharpe": 0.6010976394974569,
+    "recovery": 1.3273764432526247,
+    "survival": 90.0
+  },
+  "timestamp": "2026-02-10T13:14:06.079176"
+}

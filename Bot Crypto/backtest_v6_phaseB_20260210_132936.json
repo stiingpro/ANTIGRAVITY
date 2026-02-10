@@ -1,0 +1,42 @@
+{
+  "phase": "B - Torture Chamber",
+  "period": "2020-01-01 to 2026-02-10",
+  "config": {
+    "label": "V6-TORTURE",
+    "initial_balance": 1000.0,
+    "ema_fast": 20,
+    "ema_slow": 50,
+    "ema_macro": 200,
+    "rsi_period": 14,
+    "rsi_long_min": 40,
+    "rsi_long_max": 70,
+    "rsi_short_min": 30,
+    "rsi_short_max": 60,
+    "rsi_div_lookback": 5,
+    "atr_period": 14,
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 4.0,
+    "position_size_pct": 3.0,
+    "leverage": 5,
+    "min_leverage": 3,
+    "max_leverage": 5,
+    "commission_pct": 0.04,
+    "cooldown_candles": 6,
+    "max_consecutive_losses": 3,
+    "min_strength": 0.55,
+    "vol_threshold": 0.8
+  },
+  "stats": {
+    "trades": 6277,
+    "wr": 60.873028516807395,
+    "pnl": 1800.2865016642334,
+    "pf": 1.1471496105779806,
+    "dd": 12.031104087712187,
+    "final": 2800.2865016642336,
+    "roi": 180.02865016642335,
+    "sharpe": 0.9638968325758893,
+    "recovery": 4.097998520760647,
+    "survival": 80.0
+  },
+  "timestamp": "2026-02-10T13:29:36.263146"
+}

@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-02-10T07:03:45.584413",
+  "period": "2023-01-01 to 2026-02-09",
+  "initial_balance": 1000.0,
+  "settings": {
+    "position_size_pct": 8.0,
+    "leverage": 20,
+    "commission_pct": 0.04,
+    "sl_atr_mult": 3.0,
+    "tp_atr_mult": 6.0
+  },
+  "results": {
+    "BTCUSDT": {
+      "total_trades": 237,
+      "win_rate": 39.24,
+      "total_pnl_usd": 1917.56,
+      "total_pnl_pct": 191.76,
+      "profit_factor": 1.28,
+      "max_drawdown_pct": 45.73,
+      "sharpe_ratio": 1.5,
+      "avg_trade_duration_h": 48.0,
+      "max_consecutive_wins": 4,
+      "max_consecutive_losses": 14
+    },
+    "BNBUSDT": {
+      "total_trades": 228,
+      "win_rate": 37.72,
+      "total_pnl_usd": 809.45,
+      "total_pnl_pct": 80.95,
+      "profit_factor": 1.11,
+      "max_drawdown_pct": 54.97,
+      "sharpe_ratio": 0.89,
+      "avg_trade_duration_h": 57.3,
+      "max_consecutive_wins": 7,
+      "max_consecutive_losses": 9
+    },
+    "ETHUSDT": {
+      "total_trades": 258,
+      "win_rate": 36.05,
+      "total_pnl_usd": -478.98,
+      "total_pnl_pct": -47.9,
+      "profit_factor": 0.87,
+      "max_drawdown_pct": 81.41,
+      "sharpe_ratio": -0.13,
+      "avg_trade_duration_h": 44.5,
+      "max_consecutive_wins": 6,
+      "max_consecutive_losses": 8
+    },
+    "PAXGUSDT": {
+      "total_trades": 74,
+      "win_rate": 39.19,
+      "total_pnl_usd": -64.57,
+      "total_pnl_pct": -6.46,
+      "profit_factor": 0.92,
+      "max_drawdown_pct": 29.25,
+      "sharpe_ratio": -0.26,
+      "avg_trade_duration_h": 43.8,
+      "max_consecutive_wins": 3,
+      "max_consecutive_losses": 9
+    }
+  }
+}

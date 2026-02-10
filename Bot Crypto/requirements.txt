@@ -1,0 +1,19 @@
+# Core
+asyncio
+aiohttp
+python-dotenv
+pandas
+pandas-ta
+numpy
+
+# Binance
+binance-futures-connector>=3.0.0
+
+# Database
+supabase
+
+# Telegram
+aiogram>=3.0.0
+
+# Server
+gunicorn # Optional if using python main.py direct

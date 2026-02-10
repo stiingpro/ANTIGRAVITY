@@ -1,0 +1,30 @@
+[Unit]
+Description=Antigravity B1 V4a Trading Bot
+After=network.target
+
+[Service]
+# Usuario ec2 por defecto en AWS (ajustar si es diferente)
+User=ubuntu
+Group=ubuntu
+
+# Directorio de trabajo
+WorkingDirectory=/home/ubuntu/antigravity/Bot Crypto
+
+# Variables de entorno
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/home/ubuntu/antigravity/Bot Crypto/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Comando de ejecución (usando el python del venv)
+ExecStart=/home/ubuntu/antigravity/Bot\ Crypto/venv/bin/python run_b1_demo.py
+
+# Reiniciar automáticamente si falla
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=b1_bot
+
+[Install]
+WantedBy=multi-user.target

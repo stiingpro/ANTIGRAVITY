@@ -1,0 +1,58 @@
+{
+  "engine": "B2_RESILIENCE",
+  "strategy": "MRB (Mean Reversion Bands)",
+  "timestamp": "2026-02-10T12:55:25.333562",
+  "period": "2023-01-01 to 2026-02-10",
+  "initial_balance": 1000.0,
+  "settings": {
+    "position_size_pct": 2.0,
+    "leverage": 3,
+    "commission_pct": 0.04,
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5,
+    "bb_period": 20,
+    "bb_std_dev": 2.0,
+    "rsi_oversold": 35,
+    "rsi_overbought": 65,
+    "cooldown_candles": 3,
+    "max_consecutive_losses": 2
+  },
+  "results": {
+    "BTCUSDT": {
+      "total_trades": 375,
+      "win_rate": 31.73,
+      "total_pnl_usd": -80.31,
+      "total_pnl_pct": -8.03,
+      "profit_factor": 0.74,
+      "max_drawdown_pct": 8.57,
+      "sharpe_ratio": -0.95,
+      "avg_trade_duration_h": 42.2,
+      "max_consecutive_wins": 5,
+      "max_consecutive_losses": 9
+    },
+    "ETHUSDT": {
+      "total_trades": 371,
+      "win_rate": 38.01,
+      "total_pnl_usd": -2.99,
+      "total_pnl_pct": -0.3,
+      "profit_factor": 0.99,
+      "max_drawdown_pct": 4.19,
+      "sharpe_ratio": -0.02,
+      "avg_trade_duration_h": 43.6,
+      "max_consecutive_wins": 5,
+      "max_consecutive_losses": 12
+    },
+    "BNBUSDT": {
+      "total_trades": 368,
+      "win_rate": 37.23,
+      "total_pnl_usd": -24.73,
+      "total_pnl_pct": -2.47,
+      "profit_factor": 0.93,
+      "max_drawdown_pct": 4.27,
+      "sharpe_ratio": -0.23,
+      "avg_trade_duration_h": 42.5,
+      "max_consecutive_wins": 6,
+      "max_consecutive_losses": 15
+    }
+  }
+}

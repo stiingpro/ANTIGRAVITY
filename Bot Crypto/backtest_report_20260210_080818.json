@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-02-10T08:08:18.686632",
+  "period": "2023-01-01 to 2026-02-10",
+  "initial_balance": 3000.0,
+  "settings": {
+    "position_size_pct": 8.0,
+    "leverage": 20,
+    "commission_pct": 0.04,
+    "sl_atr_mult": 3.0,
+    "tp_atr_mult": 6.0
+  },
+  "results": {
+    "BTCUSDT": {
+      "total_trades": 238,
+      "win_rate": 39.08,
+      "total_pnl_usd": 5457.32,
+      "total_pnl_pct": 181.91,
+      "profit_factor": 1.26,
+      "max_drawdown_pct": 45.73,
+      "sharpe_ratio": 1.47,
+      "avg_trade_duration_h": 47.8,
+      "max_consecutive_wins": 4,
+      "max_consecutive_losses": 14
+    },
+    "BNBUSDT": {
+      "total_trades": 229,
+      "win_rate": 37.55,
+      "total_pnl_usd": 2040.85,
+      "total_pnl_pct": 68.03,
+      "profit_factor": 1.09,
+      "max_drawdown_pct": 54.97,
+      "sharpe_ratio": 0.83,
+      "avg_trade_duration_h": 57.1,
+      "max_consecutive_wins": 7,
+      "max_consecutive_losses": 9
+    }
+  }
+}
