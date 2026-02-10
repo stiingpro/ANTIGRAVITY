@@ -30,10 +30,14 @@ class TrifectaOrchestrator:
         self.running = False
         
         # 1. Components
+        # Try generic keys, fallback to B1 keys (guaranteed to exist)
+        ak = os.getenv('BINANCE_API_KEY') or os.getenv('B1_TESTNET_API_KEY')
+        ask = os.getenv('BINANCE_API_SECRET') or os.getenv('B1_TESTNET_API_SECRET')
+
         self.connector = ExchangeConnector(
             motor='TRIFECTA',
-            api_key=os.getenv('BINANCE_API_KEY'),
-            api_secret=os.getenv('BINANCE_API_SECRET'),
+            api_key=ak,
+            api_secret=ask,
             testnet=True
         )
         self.data_feed = DataFeed(testnet=True)
