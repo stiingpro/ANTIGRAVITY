@@ -33,14 +33,17 @@ class TrifectaOrchestrator:
         # Try generic keys, fallback to B1 keys (guaranteed to exist)
         ak = os.getenv('BINANCE_API_KEY') or os.getenv('B1_TESTNET_API_KEY')
         ask = os.getenv('BINANCE_API_SECRET') or os.getenv('B1_TESTNET_API_SECRET')
+        
+        # Check environment variable for Testnet (default to True if not set, for safety)
+        is_testnet = os.getenv('BINANCE_TESTNET', 'true').lower() == 'true'
 
         self.connector = ExchangeConnector(
             motor='TRIFECTA',
             api_key=ak,
             api_secret=ask,
-            testnet=True
+            testnet=is_testnet
         )
-        self.data_feed = DataFeed(testnet=True)
+        self.data_feed = DataFeed(testnet=is_testnet)
         self.state_manager = StateManager()
         self.telegram = TelegramInterface(self)
         
@@ -50,15 +53,17 @@ class TrifectaOrchestrator:
         self.kill_switch_threshold = 0.85 # -15%
         
         # 3. Engines
-        self.b1 = B1SprintEngine(self.connector, 'testnet')
-        self.b2 = B2ResilienceEngine(self.connector, 'testnet')
-        self.b3 = B3AnchorEngine(self.connector, 'testnet')
+        self.b1 = B1SprintEngine(self.connector, 'testnet' if is_testnet else 'production')
+        self.b2 = B2ResilienceEngine(self.connector, 'testnet' if is_testnet else 'production')
+        self.b3 = B3AnchorEngine(self.connector, 'testnet' if is_testnet else 'production')
         
     async def start(self):
-        logger.info("🚀 INICIANDO TRIFECTA UNIFICADA (RAILWAY/TESTNET)")
+        logger.info(f"🚀 INICIANDO TRIFECTA UNIFICADA (RAILWAY/{'TESTNET' if self.connector.config['is_testnet'] else 'PRODUCTION'})")
         
         # Connect Exchange
-        await self.connector.initialize()
+        if not self.connector.connect():
+            logger.critical("❌ FAILED TO CONNECT TO EXCHANGE. STOPPING.")
+            return
         
         # Restore State
         await self._restore_state()
