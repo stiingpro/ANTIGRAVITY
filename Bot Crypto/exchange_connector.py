@@ -70,6 +70,13 @@ class ExchangeConfig:
             'max_leverage': 3,
             'margin_type': 'ISOLATED',
             'position_mode': 'Hedge'  # Permite Long y Short simultáneo
+        },
+        'TRIFECTA': {
+            'name': 'TRIFECTA_GLOBAL',
+            'profile': 'Orchestrator',
+            'max_leverage': 10,
+            'margin_type': 'ISOLATED',
+            'position_mode': 'Hedge'
         }
     }
 
@@ -82,23 +89,41 @@ class ExchangeConnector:
     
     def __init__(
         self,
-        motor: Literal['B1', 'B2', 'B3'],
-        environment: Literal['testnet', 'production'] = 'testnet'
+        motor: Literal['B1', 'B2', 'B3', 'TRIFECTA'],
+        environment: Literal['testnet', 'production'] = 'testnet',
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        testnet: bool = False # Compatibilidad con main.py anterior
     ):
         """
         Inicializa el conector.
         
         Args:
-            motor: Identificador del motor (B1, B2, B3)
+            motor: Identificador del motor (B1, B2, B3, TRIFECTA)
             environment: Entorno a usar (testnet o production)
+            api_key: (Opcional) Inyección manual de key
+            api_secret: (Opcional) Inyección manual de secret
         """
         self.motor = motor
+        
+        # Compatibilidad: si pasan testnet=True, forzar environment='testnet'
+        if testnet and environment == 'production': 
+             environment = 'testnet'
+             
         self.environment = environment
         self.config = ExchangeConfig.ENVIRONMENTS[environment]
         self.motor_config = ExchangeConfig.MOTORS[motor]
         
-        # Cargar credenciales
-        self._load_credentials()
+        # Credenciales manuales o cargar de env
+        self.api_key = api_key
+        self.api_secret = api_secret
+        
+        # Credenciales manuales o cargar de env
+        self.api_key = api_key
+        self.api_secret = api_secret
+        
+        if not self.api_key or not self.api_secret:
+            self._load_credentials()
         
         # Estado de conexión
         self.connected = False
