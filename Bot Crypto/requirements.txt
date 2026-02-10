@@ -4,8 +4,8 @@ aiohttp
 python-dotenv
 pandas==1.5.3
 numpy==1.24.3
-pandas-ta
-# pandas-ta @ git+https://github.com/twopirllc/pandas-ta.git@development
+# pandas-ta
+git+https://github.com/twopirllc/pandas-ta.git@development
 
 # Binance
 binance-futures-connector>=3.0.0
