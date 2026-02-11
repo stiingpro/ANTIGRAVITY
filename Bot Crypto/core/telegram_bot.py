@@ -207,7 +207,7 @@ class TelegramInterface:
                 f"⚓ *B3 Anchor* (Institucional 4H)\n"
                 f"  ROI: `+{b3['roi']}%` | WR: `{b3['wr']}%`\n"
                 f"  Sharpe: `{b3['sharpe']}` | MDD: `{b3['mdd']}%`\n\n"
-                f"🔒 Kill Switch: -15% (B1) / -20% (B3)"
+                f"🔒 Kill Switch: -15% (B1) / -12% (B2) / -20% (B3)"
             )
             await message.answer(text, parse_mode="Markdown")
         except Exception as e:
@@ -305,13 +305,14 @@ class TelegramInterface:
                 f"*── MDD Actual ──*\n"
                 f"Drawdown: `{current_dd:.1f}%`\n"
                 f"Kill Switch B1: `-15%`\n"
+                f"Kill Switch B2: `-12%`\n"
                 f"Kill Switch B3: `-20%`\n\n"
                 f"*── MDD Histórico (Backtest) ──*\n"
                 f"```\n"
                 f"{'Motor':<16} {'Bull':>6} {'Bear':>6} {'Límite':>7}\n"
                 f"{'-'*38}\n"
             )
-            limits = {'B1': '15%', 'B2': '—', 'B3': '20%'}
+            limits = {'B1': '15%', 'B2': '12%', 'B3': '20%'}
             for key in ['B1', 'B2', 'B3']:
                 m = BACKTEST_METRICS[key]
                 pa = m['phase_a']
