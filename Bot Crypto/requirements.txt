@@ -17,3 +17,5 @@ aiogram>=3.0.0
 
 # Server
 gunicorn # Optional if using python main.py direct
+
+# Trigger Redeploy for IP Switch (Singapore)
