@@ -100,7 +100,7 @@ class TrifectaOrchestrator:
         while self.running:
             try:
                 # 1. Check Global Equity
-                bal = await self.connector.get_balance() # or separate call
+                bal = self.connector.get_balance() # or separate call
                 if bal:
                     self.current_equity = float(bal.get('totalWalletBalance', 0)) + float(bal.get('totalUnrealizedProfit', 0))
                     
