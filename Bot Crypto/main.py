@@ -167,12 +167,15 @@ class TrifectaOrchestrator:
         # Don't sys.exit - let the loop end gracefully
 
     def get_status_report(self):
+        b1_state = getattr(self.b1, 'state', 'idle')
+        b2_state = getattr(self.b2, 'state', 'idle')
+        b3_state = getattr(self.b3, 'state', 'idle')
         return (
             f"**TRIFECTA STATUS**\n"
             f"Equity: ${self.current_equity:.2f}\n"
-            f"B1: {self.b1.state}\n"
-            f"B2: {self.b2.state}\n"
-            f"B3: {self.b3.state}"
+            f"B1 Sprint: {b1_state}\n"
+            f"B2 Resilience: {b2_state}\n"
+            f"B3 Anchor: {b3_state}"
         )
 
 if __name__ == "__main__":
