@@ -100,12 +100,19 @@ class TrifectaOrchestrator:
         while self.running:
             try:
                 # 1. Check Global Equity
-                bal = self.connector.get_balance() # or separate call
+                try:
+                    bal = self.connector.get_balance()
+                except Exception as bal_err:
+                    logger.warning(f"⚠️ Balance check failed (will retry): {bal_err}")
+                    bal = None
+
                 if bal:
-                    self.current_equity = float(bal.get('totalWalletBalance', 0)) + float(bal.get('totalUnrealizedProfit', 0))
+                    # get_balance() returns: {'total': ..., 'available': ..., 'unrealized_pnl': ...}
+                    self.current_equity = float(bal.get('total', 0)) + float(bal.get('unrealized_pnl', 0))
                     
-                    # Kill Switch Check
-                    if self.current_equity < (self.initial_capital * self.kill_switch_threshold):
+                    # Kill Switch Check (only if we got a real value)
+                    if self.current_equity > 0 and self.current_equity < (self.initial_capital * self.kill_switch_threshold):
+                        logger.critical(f"🛑 Kill Switch: Equity ${self.current_equity:.2f} < threshold ${self.initial_capital * self.kill_switch_threshold:.2f}")
                         await self.emergency_stop("Global Kill Switch Triggered (-15%)")
                         break
                         
@@ -149,13 +156,15 @@ class TrifectaOrchestrator:
     async def emergency_stop(self, reason="Unknown"):
         logger.critical(f"🛑 EMERGENCY STOP: {reason}")
         self.running = False
-        await self.data_feed.stop()
-        await self.telegram.send_alert(f"🛑 **BOT DETENIDO**: {reason}")
-        # Close all positions? Optional implementation
-        
-        # Exit process
-        import sys
-        sys.exit(1)
+        try:
+            await self.data_feed.stop()
+        except Exception:
+            pass
+        try:
+            await self.telegram.send_alert(f"🛑 **BOT DETENIDO**: {reason}")
+        except Exception:
+            pass
+        # Don't sys.exit - let the loop end gracefully
 
     def get_status_report(self):
         return (
