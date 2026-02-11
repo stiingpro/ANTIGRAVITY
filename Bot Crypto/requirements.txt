@@ -7,6 +7,7 @@ numpy>=1.24.0
 
 # Binance
 binance-futures-connector>=3.0.0
+python-binance>=1.0.19
 
 # Database
 supabase
