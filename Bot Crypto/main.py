@@ -75,6 +75,11 @@ class TrifectaOrchestrator:
         # We need to manually inject configurations if needed or rely on their defaults
         # But importantly, we subscribe them to DataFeed
         
+        # Initialize Engines
+        await self.b1.initialize()
+        await self.b2.initialize()
+        await self.b3.initialize()
+
         # Subscribe B1 (5m)
         self.data_feed.add_symbol('SOLUSDT')
         self.data_feed.subscribe_engine(self._dispatch_b1)
@@ -130,8 +135,6 @@ class TrifectaOrchestrator:
         k = event.get('k', {})
         if k.get('i') == '5m' and k.get('x'): # Closed 5m candle
             # Call B1 processing logic
-            # We need to modify B1 engine to expose a 'process_candle' method
-            # For now assuming we refactor B1 to have it.
             if hasattr(self.b1, 'on_candle_closed'):
                 await self.b1.on_candle_closed(event)
 
@@ -167,9 +170,19 @@ class TrifectaOrchestrator:
         # Don't sys.exit - let the loop end gracefully
 
     def get_status_report(self):
-        b1_state = getattr(self.b1, 'state', 'idle')
-        b2_state = getattr(self.b2, 'state', 'idle')
-        b3_state = getattr(self.b3, 'state', 'idle')
+        # Helper to get state string safely
+        def get_state_str(engine, default='stopped'):
+            if hasattr(engine, 'state'):
+                s = engine.state
+                return s.value if hasattr(s, 'value') else str(s)
+            elif hasattr(engine, 'running'):
+                return 'running' if engine.running else 'stopped'
+            return default
+
+        b1_state = get_state_str(self.b1)
+        b2_state = get_state_str(self.b2)
+        b3_state = get_state_str(self.b3)
+        
         return (
             f"**TRIFECTA STATUS**\n"
             f"Equity: ${self.current_equity:.2f}\n"
@@ -186,7 +199,10 @@ if __name__ == "__main__":
     def handle_signal():
         asyncio.create_task(orchestrator.emergency_stop("Manual Shutdown"))
     
-    loop.add_signal_handler(signal.SIGINT, handle_signal)
-    loop.add_signal_handler(signal.SIGTERM, handle_signal)
+    try:
+        loop.add_signal_handler(signal.SIGINT, handle_signal)
+        loop.add_signal_handler(signal.SIGTERM, handle_signal)
+    except NotImplementedError:
+        logger.warning("⚠️ Signal handlers not supported on this platform (Windows?) - Use Ctrl+C to stop.")
     
     loop.run_until_complete(orchestrator.start())

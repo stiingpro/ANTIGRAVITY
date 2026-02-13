@@ -214,6 +214,16 @@ class ExchangeConnector:
             logger.error(f"❌ Error de conexión: {str(e)}")
             self.connected = False
             return False
+
+    def change_leverage(self, symbol: str, leverage: int):
+        """Wrapper para cambiar apalancamiento."""
+        if not self.connected:
+            raise RuntimeError("No conectado.")
+        try:
+            return self.client.futures_change_leverage(symbol=symbol, leverage=leverage)
+        except Exception as e:
+            logger.error(f"❌ Error change_leverage {symbol}: {e}")
+            raise
     
     def configure_margin(self, symbol: str = 'BTCUSDT') -> Dict:
         """
@@ -293,9 +303,9 @@ class ExchangeConnector:
             for asset in account['assets']:
                 if asset['asset'] == 'USDT':
                     usdt_balance = {
-                        'total': float(asset['walletBalance']),
-                        'available': float(asset['availableBalance']),
-                        'unrealized_pnl': float(asset['unrealizedProfit'])
+                        'total': float(asset.get('walletBalance', 0)),
+                        'available': float(asset.get('availableBalance', 0)),
+                        'unrealized_pnl': float(asset.get('unrealizedProfit', 0))
                     }
                     break
             
@@ -336,7 +346,7 @@ class ExchangeConnector:
                             'quantity': abs(float(p.get('positionAmt', 0))),
                             'entry_price': float(p.get('entryPrice', 0)),
                             'pnl': float(p.get('unRealizedProfit', 0)),
-                            'leverage': int(p.get('leverage', 1)),  # Default to 1 if missing
+                            'leverage': int(p.get('leverage', 1)),
                             'margin_type': p.get('marginType', 'ISOLATED')
                         })
                 except Exception as e:

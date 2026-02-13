@@ -241,15 +241,15 @@ class TelegramInterface:
             bal = self.orchestrator.connector.get_balance()
             total = float(bal.get('total', 0)) if bal else 0
             pnl_live = float(bal.get('unrealized_pnl', 0)) if bal else 0
-            initial = 3000.0  # Capital inicial Testnet
-
+            initial = 5000.0  # Capital inicial Testnet
+            
             live_roi = ((total - initial) / initial) * 100 if initial > 0 else 0
             emoji_live = '🟢' if live_roi >= 0 else '🔴'
 
             text = (
                 f"💹 *P&L TRIFECTA*\n\n"
                 f"*── Live (Testnet) ──*\n"
-                f"Capital Inicial: `$3,000.00`\n"
+                f"Capital Inicial: `${initial:,.2f}`\n"
                 f"Balance Actual: `${total:.2f}`\n"
                 f"{emoji_live} ROI Live: `{live_roi:+.2f}%`\n"
                 f"PnL No Realizado: `${pnl_live:.2f}`\n\n"
@@ -295,7 +295,7 @@ class TelegramInterface:
         try:
             bal = self.orchestrator.connector.get_balance()
             total = float(bal.get('total', 0)) if bal else 0
-            initial = 3000.0
+            initial = 5000.0
             
             # Current drawdown from peak (simplified: from initial)
             current_dd = min(0, ((total - initial) / initial) * 100)

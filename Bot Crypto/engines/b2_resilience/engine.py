@@ -170,13 +170,13 @@ class B2ResilienceEngine:
         """Inicializar B2 para modo pasivo."""
         logger.info("🚀 INICIANDO B2_RESILIENCE V6 [PASSIVE MODE]")
         
-        account = await self.connector.get_account()
-        self.start_balance = float(account.get('totalWalletBalance', 0))
+        account = self.connector.get_balance() if hasattr(self.connector, 'get_balance') else {'total': 0}
+        self.start_balance = float(account.get('total', 0))
         logger.info(f"💰 Balance inicial: ${self.start_balance:,.2f}")
         
         for symbol in self.CONFIG['symbols']:
             try:
-                await self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
+                self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
             except Exception as e:
                 logger.warning(f"  ⚠️ {symbol} leverage: {e}")
         
@@ -377,8 +377,8 @@ class B2ResilienceEngine:
     async def _execute_trade(self, signal: TradeSignal):
         """Ejecutar una operación con leverage dinámico."""
         try:
-            account = await self.connector.get_account()
-            balance = float(account.get('totalWalletBalance', 0))
+            account = self.connector.get_balance()
+            balance = float(account.get('total', 0))
             
             # Calcular margin (3% del balance)
             margin = balance * (self.CONFIG['max_position_size_pct'] / 100)

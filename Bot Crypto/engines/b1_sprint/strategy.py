@@ -5,7 +5,8 @@ Estrategia: 5m EMA Crossover + 15m Trend Confirmation
 Activos: SOLUSDT (Optimized)
 """
 
-from typing import Optional, Dict
+from typing import Optional, Dict, List
+from datetime import datetime
 import logging
 import math
 
@@ -142,11 +143,11 @@ class B1Strategy:
                 symbol=symbol,
                 side=TradeSide.SHORT,
                 strength=min(short_score, 1.0),
-                entry_price=price,
-                stop_loss=round(price + sl_distance, self._price_precision(symbol)),
-                take_profit=round(price - tp_distance, self._price_precision(symbol)),
+                entry_price=c5[-1],
+                stop_loss=0.0,
+                take_profit=0.0,
                 timestamp=datetime.now(),
-                reason=" + ".join(short_reasons)
+                reason=f"V5.1 Score: {short_score:.2f} (E={cross_bear} V={below_vwap})"
             )
         
         return None
@@ -226,3 +227,44 @@ class B1Strategy:
         if not tr_values:
             return 0
         return sum(tr_values[-period:]) / min(period, len(tr_values))
+
+    def _vwap(self, highs: List[float], lows: List[float], closes: List[float], volumes: List[float], period: int) -> float:
+        """Rolling VWAP over the last 'period' candles."""
+        if len(closes) < period:
+            return closes[-1]
+            
+        # Slice the last 'period' data points
+        h = highs[-period:]
+        l = lows[-period:]
+        c = closes[-period:]
+        v = volumes[-period:]
+        
+        cum_pv = 0.0
+        cum_v = 0.0
+        
+        for i in range(len(c)):
+            tp = (h[i] + l[i] + c[i]) / 3.0
+            cum_pv += tp * v[i]
+            cum_v += v[i]
+            
+        if cum_v == 0:
+            return c[-1]
+            
+        return cum_pv / cum_v
+
+    def _bb(self, closes: List[float], period: int, std_dev: float):
+        """Bollinger Bands."""
+        if len(closes) < period:
+            return closes[-1], closes[-1], closes[-1]
+            
+        # SMA
+        sma = sum(closes[-period:]) / period
+        
+        # Std Dev
+        variance = sum([((x - sma) ** 2) for x in closes[-period:]]) / period
+        std = math.sqrt(variance)
+        
+        upper = sma + (std * std_dev)
+        lower = sma - (std * std_dev)
+        
+        return upper, sma, lower

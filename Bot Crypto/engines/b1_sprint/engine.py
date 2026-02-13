@@ -112,7 +112,7 @@ class B1SprintEngine:
         """Inicializar componentes sin iniciar el loop."""
         logger.info("🏁 INICIANDO B1_SPRINT V5.1 (SOL-Only) [PASSIVE MODE]")
         
-        balance = await self.connector.get_balance() if hasattr(self.connector, 'get_balance') else {'available': 0}
+        balance = self.connector.get_balance() if hasattr(self.connector, 'get_balance') else {'available': 0}
         self.initial_balance = float(balance.get('available', 0))
         self.current_balance = self.initial_balance
         logger.info(f"💰 Balance inicial: ${self.initial_balance:.2f}")
@@ -130,7 +130,7 @@ class B1SprintEngine:
         for symbol in self.CONFIG['symbols']:
             try:
                 # self.connector.configure_margin(symbol) # Assumed handled by connector or main
-                await self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
+                self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
             except Exception as e:
                 logger.warning(f"⚠️ Error config leverage {symbol}: {e}")
                 
