@@ -142,10 +142,9 @@ class B1SprintEngine:
         await self._main_loop()
 
     async def on_candle_closed(self, event: Dict):
-        """Método pasivo para Arquitectura Unificada (Railway)."""
+        """Callback para DataFeed (Passive Mode)."""
         if self.state != EngineState.RUNNING: return
         
-        # Procesar evento de vela 5m
         symbol = event.get('s')
         if symbol not in self.CONFIG['symbols']: return
         

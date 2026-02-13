@@ -163,11 +163,33 @@ class TelegramInterface:
             if not positions:
                 await message.answer("📊 No hay posiciones abiertas.")
                 return
+
             lines = [f"📊 *POSICIONES ABIERTAS ({len(positions)})*\n"]
+            
+            # Helper to identify source
+            def get_source_tag(symbol):
+                # Check B1
+                if self.orchestrator.b1.position_manager and \
+                   symbol in self.orchestrator.b1.position_manager.active_positions:
+                    return "🏎 B1"
+                
+                # Check B2
+                if self.orchestrator.b2.position_manager and \
+                   self.orchestrator.b2.position_manager.has_position(symbol):
+                    return "🛡 B2"
+                
+                # Check B3 (Assumption: active if matches symbol list)
+                if symbol in self.orchestrator.b3.CONFIG['symbols']:
+                    return "⚓ B3"
+                
+                return "❓ Manual"
+
             for p in positions:
                 emoji = '🟢' if p['pnl'] >= 0 else '🔴'
+                tag = get_source_tag(p['symbol'])
+                
                 lines.append(
-                    f"{emoji} *{p['symbol']}* {p['side']}\n"
+                    f"{emoji} *{p['symbol']}* {p['side']}  {tag}\n"
                     f"   Entry: `${p['entry_price']:.4f}`\n"
                     f"   Qty: `{p['quantity']}`  x{p['leverage']}\n"
                     f"   PnL: `${p['pnl']:.2f}`"

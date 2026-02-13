@@ -191,6 +191,7 @@ class B2ResilienceEngine:
     async def on_candle_closed(self, event: Dict):
         """B2 Passive Logic (1H trigger)."""
         if self.state != EngineState.RUNNING: return
+
         # Kill switch check
         if self._check_kill_switch(): return
 
