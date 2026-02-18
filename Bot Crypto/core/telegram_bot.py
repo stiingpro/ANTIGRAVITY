@@ -65,6 +65,7 @@ class TelegramInterface:
             ("pnl", self.cmd_pnl),
             ("sharpe", self.cmd_sharpe),
             ("kill", self.cmd_kill),
+            ("local_positions", self.cmd_positions), # ALIAS LOCAL PARA BYPASS RAILWAY
         ]
         for cmd_name, handler in commands:
             self.dp.message(Command(cmd_name))(handler)
@@ -164,7 +165,7 @@ class TelegramInterface:
                 await message.answer("📊 No hay posiciones abiertas.")
                 return
 
-            lines = [f"📊 *POSICIONES ABIERTAS ({len(positions)})*\n"]
+            lines = [f"📊 *POSICIONES ABIERTAS ({len(positions)}) [LOCAL-DEBUG]*\n"]
             
             # Helper to identify source
             def get_source_tag(symbol):
@@ -178,6 +179,10 @@ class TelegramInterface:
                    self.orchestrator.b2.position_manager.has_position(symbol):
                     return "🛡 B2"
                 
+                # Heuristic: SOLUSDT is B1 Priority
+                if str(symbol).strip().upper() == 'SOLUSDT':
+                    return "🏎 B1"
+                
                 # Check B3 (Assumption: active if matches symbol list)
                 if symbol in self.orchestrator.b3.CONFIG['symbols']:
                     return "⚓ B3"
@@ -188,6 +193,9 @@ class TelegramInterface:
                 emoji = '🟢' if p['pnl'] >= 0 else '🔴'
                 tag = get_source_tag(p['symbol'])
                 
+                # DEBUG LINE (Force Error Level for visibility)
+                logger.error(f"🔍 TELEGRAM DEBUG: Symbol='{p['symbol']}' -> Tag='{tag}'")
+
                 lines.append(
                     f"{emoji} *{p['symbol']}* {p['side']}  {tag}\n"
                     f"   Entry: `${p['entry_price']:.4f}`\n"

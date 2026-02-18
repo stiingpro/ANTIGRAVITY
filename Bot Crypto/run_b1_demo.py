@@ -35,9 +35,9 @@ async def main():
     
     # Init Connector
     connector = ExchangeConnector(motor='B1', environment='testnet')
-    
-    # Init Engine
-    engine = B1SprintEngine(connector, environment='testnet')
+    if not connector.connect():
+        logger.error("Fallo al conectar con Exchange")
+        return
     
     # Init Engine
     engine = B1SprintEngine(connector, environment='testnet')

@@ -405,16 +405,18 @@ class B2ResilienceEngine:
             logger.info(f"   Position: ${notional:,.2f} ({self.CONFIG['max_position_size_pct']}% × {effective_leverage}x)")
             
             # Ajustar leverage en exchange
-            await self.connector.change_leverage(
+            self.connector.change_leverage(
                 symbol=signal.symbol,
                 leverage=effective_leverage
             )
             
             # Orden de entrada
-            order = await self.connector.create_order(
+            pos_side = 'LONG' if signal.side == TradeSide.LONG else 'SHORT'
+            order = self.connector.client.futures_create_order(
                 symbol=signal.symbol,
                 side=order_side,
-                order_type='MARKET',
+                positionSide=pos_side,
+                type='MARKET',
                 quantity=quantity
             )
             
@@ -446,20 +448,23 @@ class B2ResilienceEngine:
         """Colocar órdenes SL y TP."""
         try:
             sl_side = 'SELL' if signal.side == TradeSide.LONG else 'BUY'
+            pos_side = 'LONG' if signal.side == TradeSide.LONG else 'SHORT'
             
-            await self.connector.create_order(
+            self.connector.client.futures_create_order(
                 symbol=signal.symbol,
                 side=sl_side,
-                order_type='STOP_MARKET',
+                positionSide=pos_side,
+                type='STOP_MARKET',
                 quantity=quantity,
                 stopPrice=signal.stop_loss,
                 closePosition=True
             )
             
-            await self.connector.create_order(
+            self.connector.client.futures_create_order(
                 symbol=signal.symbol,
                 side=sl_side,
-                order_type='TAKE_PROFIT_MARKET',
+                positionSide=pos_side,
+                type='TAKE_PROFIT_MARKET',
                 quantity=quantity,
                 stopPrice=signal.take_profit,
                 closePosition=True

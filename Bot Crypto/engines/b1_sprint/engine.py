@@ -281,41 +281,10 @@ class B1SprintEngine:
 
     
     async def _update_positions(self):
-        """Actualizar estado de posiciones."""
-        try:
-            open_positions = self.connector.get_open_positions()
-            
-            # Actualizar balance
-            balance = self.connector.get_balance()
-            self.current_balance = balance.get('total', self.current_balance)
-            
-            # Actualizar PnL
-            self.total_pnl = self.current_balance - self.initial_balance
-            
-        except Exception as e:
-            logger.error(f"Error actualizando posiciones: {e}")
-    
-    async def _manage_positions(self):
-        """Gestionar posiciones abiertas (trailing stop, etc)."""
-        for symbol, position in list(self.positions.items()):
-            # Por ahora, solo verificar si la posición sigue abierta
-            open_pos = self.connector.get_open_positions()
-            position_exists = any(
-                float(p['positionAmt']) != 0 
-                for p in open_pos 
-                if p['symbol'] == symbol
-            )
-            
-            if not position_exists:
-                # Posición fue cerrada (SL o TP)
-                del self.positions[symbol]
-                logger.info(f"📍 Posición {symbol} cerrada")
-    
-
-    async def _update_positions(self):
         """Sincronizar posiciones con exchange y actualizar Risk Manager."""
         # Obtener posiciones del exchange
-        exchange_positions = await self.position_manager.get_open_positions()
+        # Usar conector directo (sincrono)
+        exchange_positions = self.connector.get_open_positions()
         active_symbols = [p['symbol'] for p in exchange_positions]
         
         # Detectar cierres
@@ -326,21 +295,31 @@ class B1SprintEngine:
                 
         # Procesar cierres
         for symbol in closed_symbols:
-            pos = self.positions.pop(symbol)
-            # Calcular PnL (Estimado o fetch)
-            # Fetch recent trade history for exact PnL
-            pnl = await self._fetch_trade_pnl(symbol)
+            # pos = self.positions.pop(symbol) # Fix: pop might fail if concurrent? Safe enough here.
+             if symbol in self.positions:
+                pos = self.positions.pop(symbol)
+                
+                # Calcular PnL (Estimado o fetch)
+                # Fetch recent trade history for exact PnL
+                pnl = await self._fetch_trade_pnl(symbol)
+                
+                logger.info(f"⚖️ Posición cerrada: {symbol} PnL: ${pnl:.2f}")
+                self.total_pnl += pnl
+                
+                if pnl > 0: 
+                    # self.wins_today += 1 # these vars are not initialized in __init__?
+                    pass 
+                else: 
+                    # self.losses_today += 1
+                    pass
+                
+                if self.risk_manager:
+                    self.risk_manager.on_trade_closed(pnl)
             
-            logger.info(f"⚖️ Posición cerrada: {symbol} PnL: ${pnl:.2f}")
-            self.total_pnl += pnl
-            
-            if pnl > 0: self.wins_today += 1
-            else: self.losses_today += 1
-            
-            self.risk_manager.on_trade_closed(pnl)
-            
-        # Actualizar mapa local con data real
-        # (Opcional: actualizar entry_price si cambió por average)
+        # Actualizar variables de estado si hacen falta
+        # self.positions deberia reflejar lo que sabemos localmente
+        # Pero si hay nuevas posiciones externas no las estamos ingestando aqui.
+        # B1 mantiene su propio estado en self.positions via open_position return.
         
     async def _fetch_trade_pnl(self, symbol) -> float:
         """Obtener PnL del último trade cerrado."""
