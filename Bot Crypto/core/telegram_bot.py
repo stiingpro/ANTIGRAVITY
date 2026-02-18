@@ -173,6 +173,10 @@ class TelegramInterface:
                 if str(symbol).strip().upper() == 'SOLUSDT':
                     return "🏎 B1"
 
+                # Heuristic: DOTUSDT/AVAXUSDT is B2 Priority
+                if str(symbol).strip().upper() in ['DOTUSDT', 'AVAXUSDT']:
+                    return "🛡 B2"
+
                 # Check B1
                 if self.orchestrator.b1.position_manager and \
                    symbol in self.orchestrator.b1.position_manager.active_positions:
