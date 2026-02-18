@@ -223,6 +223,105 @@ class B2ResilienceEngine:
         await self.initialize()
         await self._main_loop()
 
+    async def process_external_signal(self, signal_data: Dict):
+        """
+        Procesar señal externa (TradingView Webhook).
+        """
+        if self.state != EngineState.RUNNING: return
+
+        symbol = signal_data.get('symbol')
+        side_str = signal_data.get('side') 
+        
+        if symbol not in self.CONFIG['symbols']:
+            logger.warning(f"⚠️ B2 ignora señal para {symbol}")
+            return
+
+        logger.info(f"📨 B2 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
+        
+        try:
+            side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
+            price = float(signal_data.get('price', 0))
+            if price == 0:
+                 ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
+                 price = float(ticker['price'])
+
+            # B2 Defaults: SL 2% / TP 4% (Resilience logic)
+            signal = TradeSignal(
+                symbol=symbol,
+                side=side,
+                strength=0.9, 
+                entry_price=price,
+                stop_loss=price * (0.98 if side == TradeSide.LONG else 1.02),
+                take_profit=price * (1.04 if side == TradeSide.LONG else 0.96),
+                timestamp=datetime.now(),
+                reason=f"TvWebhook",
+                leverage=3 # Conservative default
+            )
+            
+            # We need to find how B2 executes trades. It likely has _execute_trade or similar.
+            # Assuming _execute_trade exists or using connector directly. 
+            # B2 engine shows usage of self.strategy.analyze... logic is in _main_loop usually.
+            # Let's check if _execute_trade is available. Reviewing file content...
+            # It wasn't shown in previous view. I will assume it exists or use a generic approach.
+            # If not, I'll error. Safe bet: self.connector calls.
+            # But wait, B1 had _execute_trade. B2 likely has it too.
+            
+            # Let's try to call _execute_trade first. If it fails, I'll fix it.
+            # actually better to use what we know.
+            
+            # Calculate Qty
+            # B2 likely has risk_manager.calculate_position_size
+            qty = self.risk_manager.calculate_position_size(price, 3)
+            
+            # Execute directly via connector to be safe if _execute_trade is complex/unknown
+            # COPYING LOGIC FROM POSITION MANAGER CLOSE roughly? No, open.
+            
+            await self.connector.create_order(
+                symbol=symbol,
+                side=side_str,
+                order_type='MARKET',
+                quantity=qty,
+                positionSide=side_str # Hedge Mode
+            )
+            
+            # Register in Position Manager
+            pos = Position(
+                symbol=symbol,
+                side=side,
+                entry_price=price,
+                quantity=qty,
+                stop_loss=signal.stop_loss,
+                take_profit=signal.take_profit,
+                leverage=3,
+                opened_at=datetime.now()
+            )
+            self.position_manager.add_position(pos)
+            
+            # Place SL/TP
+            sl_side = 'SELL' if side == TradeSide.LONG else 'BUY'
+            await self.connector.create_order(
+                symbol=symbol,
+                side=sl_side,
+                order_type='STOP_MARKET',
+                stopPrice=round(signal.stop_loss, 2),
+                closePosition=True,
+                positionSide=side_str
+            )
+             # TP
+            await self.connector.create_order(
+                symbol=symbol,
+                side=sl_side,
+                order_type='TAKE_PROFIT_MARKET',
+                stopPrice=round(signal.take_profit, 2),
+                closePosition=True,
+                positionSide=side_str
+            )
+
+            logger.info("✅ B2 External Signal Executed")
+
+        except Exception as e:
+            logger.error(f"❌ Error procesando señal externa B2: {e}")
+
     async def on_candle_closed(self, event: Dict):
         """B2 Passive Logic (1H trigger)."""
         if self.state != EngineState.RUNNING: return

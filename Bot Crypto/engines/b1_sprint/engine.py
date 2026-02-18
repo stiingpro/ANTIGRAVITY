@@ -233,6 +233,53 @@ class B1SprintEngine:
                 logger.error(f"❌ Error en loop: {e}")
                 await asyncio.sleep(10)
 
+    async def process_external_signal(self, signal_data: Dict):
+        """
+        Procesar señal externa (TradingView Webhook).
+        """
+        if self.state != EngineState.RUNNING:
+            logger.warning("⚠️ B1 recibio señal externa pero no esta corriendo.")
+            return
+
+        symbol = signal_data.get('symbol')
+        side_str = signal_data.get('side') # BUY/SELL
+        
+        if symbol != self.CONFIG['symbol']:
+            logger.warning(f"⚠️ B1 ignora señal para {symbol} (Solo opera {self.CONFIG['symbol']})")
+            return
+
+        logger.info(f"📨 B1 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
+        
+        try:
+            side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
+            price = float(signal_data.get('price', 0))
+            if price == 0:
+                 ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
+                 price = float(ticker['price'])
+
+            # Construct synthetic signal
+            # SL/TP defaults: SL 1%, TP 2% (Sprint logic)
+            signal = TradeSignal(
+                symbol=symbol,
+                side=side,
+                strength=1.0, 
+                entry_price=price,
+                stop_loss=price * (0.99 if side == TradeSide.LONG else 1.01),
+                take_profit=price * (1.02 if side == TradeSide.LONG else 0.98),
+                timestamp=datetime.now(),
+                reason=f"TvWebhook"
+            )
+            
+            # Calculate Qty
+            qty = self.risk_manager.calculate_quantity(price, self.CONFIG['max_leverage'])
+            
+            # Execute
+            await self._execute_trade(signal, qty)
+            logger.info("✅ B1 External Signal Executed")
+
+        except Exception as e:
+            logger.error(f"❌ Error procesando señal externa B1: {e}")
+
     async def _get_market_data(self, symbol, interval) -> Dict:
         try:
             klines = self.connector.client.futures_klines(symbol=symbol, interval=interval, limit=100)

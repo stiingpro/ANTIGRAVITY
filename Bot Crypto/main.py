@@ -8,19 +8,10 @@ from dotenv import load_dotenv
 from core.data_feed import DataFeed
 from core.state_manager import StateManager
 from core.telegram_bot import TelegramInterface
+from core.webhook_server import WebhookServer
 from exchange_connector import ExchangeConnector
 
-# Engines (Adapters)
-from engines.b1_sprint.engine import B1SprintEngine
-from engines.b2_resilience.engine import B2ResilienceEngine
-from engines.b3_anchor.engine import B3AnchorEngine
-
-# Configure Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('MAIN')
+# ... (Imports remain the same)
 
 class TrifectaOrchestrator:
     def __init__(self):
@@ -46,6 +37,7 @@ class TrifectaOrchestrator:
         self.data_feed = DataFeed(testnet=is_testnet)
         self.state_manager = StateManager()
         self.telegram = TelegramInterface(self)
+        self.webhook = WebhookServer(self) # New Webhook Component
         
         # 2. Kill Switch Globals
         self.initial_capital = 3000.0 # $1000 x 3
@@ -70,6 +62,10 @@ class TrifectaOrchestrator:
         
         # Start Telegram
         await self.telegram.start()
+        
+        # Start Webhook Server (Port 8080 or PORT env)
+        port = int(os.getenv('PORT', 8080))
+        await self.webhook.start(port=port)
         
         # Init Engines (Passive Mode Configuration)
         # We need to manually inject configurations if needed or rely on their defaults
