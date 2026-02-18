@@ -11,7 +11,17 @@ from core.telegram_bot import TelegramInterface
 from core.webhook_server import WebhookServer
 from exchange_connector import ExchangeConnector
 
-# ... (Imports remain the same)
+# Engines (Adapters)
+from engines.b1_sprint.engine import B1SprintEngine
+from engines.b2_resilience.engine import B2ResilienceEngine
+from engines.b3_anchor.engine import B3AnchorEngine
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('MAIN')
 
 class TrifectaOrchestrator:
     def __init__(self):

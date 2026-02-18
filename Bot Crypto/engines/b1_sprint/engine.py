@@ -244,8 +244,8 @@ class B1SprintEngine:
         symbol = signal_data.get('symbol')
         side_str = signal_data.get('side') # BUY/SELL
         
-        if symbol != self.CONFIG['symbol']:
-            logger.warning(f"⚠️ B1 ignora señal para {symbol} (Solo opera {self.CONFIG['symbol']})")
+        if symbol not in self.CONFIG['symbols']:
+            logger.warning(f"⚠️ B1 ignora señal para {symbol}")
             return
 
         logger.info(f"📨 B1 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")

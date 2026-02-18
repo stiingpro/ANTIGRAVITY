@@ -101,7 +101,7 @@ class B1RiskManager:
         if quantity < min_quantity:
             quantity = min_quantity
         
-        logger.info(f"📐 Position size: {quantity} ({adjusted_value:.2f} USDT)")
+        logger.info(f"📐 Position size: {quantity} ({notional:.2f} USDT)")
         
         return quantity
     
