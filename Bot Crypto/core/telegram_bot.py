@@ -169,6 +169,10 @@ class TelegramInterface:
             
             # Helper to identify source
             def get_source_tag(symbol):
+                # Heuristic: SOLUSDT is B1 Priority (ALWAYS)
+                if str(symbol).strip().upper() == 'SOLUSDT':
+                    return "🏎 B1"
+
                 # Check B1
                 if self.orchestrator.b1.position_manager and \
                    symbol in self.orchestrator.b1.position_manager.active_positions:
@@ -178,10 +182,6 @@ class TelegramInterface:
                 if self.orchestrator.b2.position_manager and \
                    self.orchestrator.b2.position_manager.has_position(symbol):
                     return "🛡 B2"
-                
-                # Heuristic: SOLUSDT is B1 Priority
-                if str(symbol).strip().upper() == 'SOLUSDT':
-                    return "🏎 B1"
                 
                 # Check B3 (Assumption: active if matches symbol list)
                 if symbol in self.orchestrator.b3.CONFIG['symbols']:
