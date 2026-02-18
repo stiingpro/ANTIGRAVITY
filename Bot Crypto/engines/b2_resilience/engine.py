@@ -174,13 +174,48 @@ class B2ResilienceEngine:
         self.start_balance = float(account.get('total', 0))
         logger.info(f"💰 Balance inicial: ${self.start_balance:,.2f}")
         
+        # 1. Configurar Leverage
         for symbol in self.CONFIG['symbols']:
             try:
                 self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
             except Exception as e:
                 logger.warning(f"  ⚠️ {symbol} leverage: {e}")
         
+        # 2. Sincronizar posiciones existentes
+        await self._sync_positions()
+        
         self.state = EngineState.RUNNING
+
+    async def _sync_positions(self):
+        """Sincronizar posiciones existentes en el exchange."""
+        try:
+            logger.info("🔄 Sincronizando posiciones existentes...")
+            open_positions = self.connector.get_open_positions()
+            count = 0
+            for p in open_positions:
+                if p['symbol'] in self.CONFIG['symbols']:
+                    # Convert dict to Position object
+                    # Note: SL/TP are unknown from just position endpoint, defaulting to 0
+                    pos = Position(
+                        symbol=p['symbol'],
+                        side=TradeSide.LONG if p['side'] == 'LONG' else TradeSide.SHORT,
+                        entry_price=p['entry_price'],
+                        quantity=p['quantity'],
+                        stop_loss=0.0, 
+                        take_profit=0.0,
+                        leverage=p['leverage'],
+                        unrealized_pnl=p['pnl'],
+                        opened_at=datetime.now()
+                    )
+                    self.position_manager.add_position(pos)
+                    count += 1
+            if count > 0:
+                logger.info(f"✅ Sincronizadas {count} posiciones en B2.")
+            else:
+                logger.info("ℹ️ No se encontraron posiciones previas para B2.")
+                
+        except Exception as e:
+            logger.error(f"❌ Error sincronizando posiciones en B2: {e}")
 
     async def start(self):
         """Iniciar el motor de trading (Standalone)."""
