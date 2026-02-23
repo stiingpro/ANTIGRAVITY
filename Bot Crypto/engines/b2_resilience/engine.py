@@ -456,6 +456,21 @@ class B2ResilienceEngine:
         
         return True
     
+    # Precision map: cantidad de decimales permitidos por Binance Futures
+    QTY_PRECISION = {
+        'BTCUSDT': 3, 'ETHUSDT': 3, 'SOLUSDT': 0, 'AVAXUSDT': 1,
+        'DOTUSDT': 1, 'LINKUSDT': 1, 'ADAUSDT': 0, 'XRPUSDT': 1,
+        'BNBUSDT': 2, 'MATICUSDT': 0, 'DOGEUSDT': 0,
+    }
+
+    @staticmethod
+    def _round_qty(symbol: str, qty: float) -> float:
+        """Redondear qty a la precisión válida para Binance."""
+        precision = B2ResilienceEngine.QTY_PRECISION.get(symbol, 3)
+        import math
+        factor = 10 ** precision
+        return math.floor(qty * factor) / factor
+
     async def _execute_trade(self, signal: TradeSignal):
         """Ejecutar una operación con leverage dinámico."""
         try:
@@ -475,6 +490,9 @@ class B2ResilienceEngine:
             
             notional = margin * effective_leverage
             quantity = notional / signal.entry_price
+            quantity = self._round_qty(signal.symbol, quantity)
+            if quantity <= 0:
+                raise ValueError(f"Cantidad calculada = 0 para {signal.symbol} (notional=${notional:.2f}, price=${signal.entry_price:.2f})")
             
             order_side = signal.side.value
             

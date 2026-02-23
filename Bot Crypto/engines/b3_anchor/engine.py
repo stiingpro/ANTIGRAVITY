@@ -90,8 +90,11 @@ class B3AnchorEngine:
 
         signal = MockSignal(symbol, target_side, price, sl, tp, "TvWebhook")
         
-        # Calcular cantidad
+        # Calcular cantidad (con precisión correcta para Binance)
         qty = self.risk_manager.calculate_position_size(price, self.CONFIG['max_leverage'])
+        qty = self._round_qty(symbol, qty)
+        if qty <= 0:
+            raise ValueError(f"Cantidad calculada = 0 para {symbol} (price=${price:.2f})")
         
         # Ejecutar trade — dejar que excepciones se propaguen al webhook
         await self._execute_trade(signal, qty)
@@ -177,6 +180,21 @@ class B3AnchorEngine:
             logger.error(f"❌ Error fetching {symbol} {interval}: {e}")
             return None
 
+    # Precision map: decimales permitidos por Binance Futures
+    QTY_PRECISION = {
+        'BTCUSDT': 3, 'ETHUSDT': 3, 'SOLUSDT': 0, 'AVAXUSDT': 1,
+        'DOTUSDT': 1, 'LINKUSDT': 1, 'ADAUSDT': 0, 'XRPUSDT': 1,
+        'BNBUSDT': 2, 'MATICUSDT': 0, 'DOGEUSDT': 0,
+    }
+
+    @staticmethod
+    def _round_qty(symbol: str, qty: float) -> float:
+        """Redondear qty a la precisión válida para Binance."""
+        precision = B3AnchorEngine.QTY_PRECISION.get(symbol, 3)
+        import math
+        factor = 10 ** precision
+        return math.floor(qty * factor) / factor
+
     async def _execute_trade(self, signal, qty):
         """
         Ejecuta orden Hedge Mode (LONG/SHORT) con SL/TP.
@@ -189,6 +207,10 @@ class B3AnchorEngine:
         # Por ahora asumimos LONG.
         
         try:
+            qty = self._round_qty(symbol, qty)
+            if qty <= 0:
+                raise ValueError(f"Cantidad calculada = 0 para {symbol}")
+            
             logger.info(f"⚓ EJECUTANDO B3: {side} {qty} {symbol}")
             
             # 1. Market Entry
