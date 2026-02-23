@@ -247,7 +247,7 @@ class B2ResilienceEngine:
                 logger.warning(f"⚠️ B2 balance fetch: {e}")
 
         side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
-        price = float(signal_data.get('price', 0))
+        price = float(signal_data.get('price') or 0)
         if price == 0:
             ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
             price = float(ticker['price'])
@@ -460,7 +460,7 @@ class B2ResilienceEngine:
         """Ejecutar una operación con leverage dinámico."""
         try:
             account = self.connector.get_balance()
-            balance = float(account.get('total', 0))
+            balance = float(account.get('total') or 0)
             
             # Calcular margin (3% del balance)
             margin = balance * (self.CONFIG['max_position_size_pct'] / 100)

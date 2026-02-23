@@ -61,7 +61,7 @@ class B3AnchorEngine:
         logger.info(f"📨 B3 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
         
         # Obtener precio actual si no viene en la señal
-        price = float(signal_data.get('price', 0))
+        price = float(signal_data.get('price') or 0)
         if price == 0:
             ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
             price = float(ticker['price'])
