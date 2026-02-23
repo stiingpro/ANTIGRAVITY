@@ -215,6 +215,78 @@ class ExchangeConnector:
             self.connected = False
             return False
 
+    async def execute_with_retry(
+        self,
+        fn,
+        *args,
+        max_retries: int = 3,
+        base_delay: float = 0.5,
+        **kwargs
+    ):
+        """
+        Execute a Binance API call with exponential backoff retry.
+        
+        Catches rate-limit errors (HTTP 429, -1015) and retries.
+        Delays: 0.5s → 1.0s → 2.0s (exponential).
+        
+        Args:
+            fn: The function to call (sync or async)
+            max_retries: Maximum retry attempts
+            base_delay: Initial delay in seconds (doubles each retry)
+        
+        Returns:
+            Result of fn(*args, **kwargs)
+            
+        Raises:
+            Last exception if all retries exhausted
+        """
+        import asyncio
+        
+        last_error = None
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Support both sync and async callables
+                if asyncio.iscoroutinefunction(fn):
+                    result = await fn(*args, **kwargs)
+                else:
+                    result = fn(*args, **kwargs)
+                return result
+                
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                
+                # Identify rate-limit errors
+                is_rate_limit = (
+                    '429' in error_str or
+                    '-1015' in error_str or
+                    'Too many' in error_str.lower() or
+                    'rate limit' in error_str.lower()
+                )
+                
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    
+                    if is_rate_limit:
+                        logger.warning(
+                            f"⏳ Rate limit hit (attempt {attempt}/{max_retries}), "
+                            f"retrying in {delay:.1f}s: {error_str[:100]}"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ API error (attempt {attempt}/{max_retries}), "
+                            f"retrying in {delay:.1f}s: {error_str[:100]}"
+                        )
+                    
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        f"❌ All {max_retries} retries exhausted: {error_str[:200]}"
+                    )
+        
+        raise last_error
+
     def change_leverage(self, symbol: str, leverage: int):
         """Wrapper para cambiar apalancamiento."""
         if not self.connected:
