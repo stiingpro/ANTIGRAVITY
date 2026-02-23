@@ -35,18 +35,22 @@ class WebhookServer:
         self._received_count = 0
         self._success_count = 0
         self._error_count = 0
+        self._last_error = None
 
     # ═══════════════════════════════════════════════════
     #  ROUTING (< 100ms response)
     # ═══════════════════════════════════════════════════
 
     async def handle_health(self, request):
-        return web.json_response({
+        data = {
             "status": "running",
             "webhooks_received": self._received_count,
             "webhooks_success": self._success_count,
             "webhooks_errors": self._error_count
-        })
+        }
+        if self._last_error:
+            data["last_error"] = self._last_error
+        return web.json_response(data)
 
     async def handle_webhook(self, request):
         """
@@ -155,6 +159,7 @@ class WebhookServer:
         except Exception as e:
             t_elapsed = time.monotonic() - t_start
             self._error_count += 1
+            self._last_error = f"{engine_id} {side} {symbol}: {str(e)[:300]}"
 
             logger.error(
                 f"❌ Webhook #{webhook_id} FAILED: {engine_id} {side} {symbol} "
