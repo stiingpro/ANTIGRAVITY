@@ -227,10 +227,8 @@ class B2ResilienceEngine:
         """
         Procesar señal externa (TradingView Webhook).
         Delega a _execute_trade() que usa self.connector.client.futures_create_order().
+        No requiere self.state == RUNNING — webhooks siempre se procesan.
         """
-        if self.state != EngineState.RUNNING:
-            raise RuntimeError("B2 no está corriendo (state={})".format(self.state.value))
-
         symbol = signal_data.get('symbol')
         side_str = signal_data.get('side') 
         
@@ -239,6 +237,15 @@ class B2ResilienceEngine:
 
         logger.info(f"📨 B2 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
         
+        # Auto-init si el motor no fue inicializado formalmente
+        if self.start_balance == 0:
+            try:
+                account = self.connector.get_balance()
+                self.start_balance = float(account.get('total', 0))
+                logger.info(f"💰 B2 Auto-init balance: ${self.start_balance:,.2f}")
+            except Exception as e:
+                logger.warning(f"⚠️ B2 balance fetch: {e}")
+
         side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
         price = float(signal_data.get('price', 0))
         if price == 0:
