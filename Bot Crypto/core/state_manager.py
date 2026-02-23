@@ -13,7 +13,7 @@ class StateManager:
     """
     def __init__(self):
         url = os.environ.get("SUPABASE_URL")
-        key = os.environ.get("SUPABASE_KEY")
+        key = os.environ.get("SUPABASE_ANON_KEY")
         
         if not url or not key:
             logger.warning("⚠️ Supabase creds no encontradas. Persistencia DESACTIVADA.")

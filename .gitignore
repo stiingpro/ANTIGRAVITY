@@ -1,5 +1,5 @@
 # ============================================
-# ANTIGRAVITY — Bot Crypto .gitignore
+# ANTIGRAVITY — Root .gitignore
 # ============================================
 
 # Secrets & credentials (CRITICAL)
@@ -36,6 +36,10 @@ venv/
 Thumbs.db
 desktop.ini
 .DS_Store
+ehthumbs.db
+
+# Node (if applicable)
+node_modules/
 
 # Logs
 *.log

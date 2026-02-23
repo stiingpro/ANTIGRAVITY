@@ -36,7 +36,7 @@ class TelegramInterface:
     Comandos: start, help, status, balance, positions, report, metrics, risk, pnl, sharpe, kill
     """
     def __init__(self, orchestrator):
-        self.token = os.environ.get("TELEGRAM_TOKEN")
+        self.token = os.environ.get("TELEGRAM_BOT_TOKEN")
         self.chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         self.orchestrator = orchestrator
         self.bot = None
