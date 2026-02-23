@@ -50,59 +50,52 @@ class B3AnchorEngine:
     async def process_external_signal(self, signal_data: Dict):
         """
         Procesar señal externa (TradingView Webhook).
+        No requiere self.running — webhooks siempre se procesan.
         """
-        if not self.running: return
-
         symbol = signal_data.get('symbol')
         side_str = signal_data.get('side') 
         
         if symbol not in self.CONFIG['symbols']:
-            logger.warning(f"⚠️ B3 ignora señal para {symbol}")
-            return
+            raise ValueError(f"B3 no opera {symbol}. Válidos: {self.CONFIG['symbols']}")
 
         logger.info(f"📨 B3 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
         
-        try:
-            # Re-map side string to internal logic if needed, signal object etc.
-            # B3 uses 'signal' object in _execute_trade(signal, qty)
-            # We need to mock that object.
-            
-            price = float(signal_data.get('price', 0))
-            if price == 0:
-                 ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
-                 price = float(ticker['price'])
+        # Obtener precio actual si no viene en la señal
+        price = float(signal_data.get('price', 0))
+        if price == 0:
+            ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
+            price = float(ticker['price'])
 
-            # Mock Signal Object
-            class MockSignal:
-                def __init__(self, s, side, ep, sl, tp, reason):
-                    self.symbol = s
-                    self.side = side # 'LONG' or 'SHORT' string based on B3 logic? 
-                    # B3 seems to use 'LONG'/'SHORT' strings or ENUM?
-                    # logic: side = signal.side # 'LONG'
-                    self.entry_price = ep
-                    self.stop_loss = sl
-                    self.take_profit = tp
-                    self.reason = reason
+        # Asegurar que risk_manager tiene balance actualizado
+        if self.risk_manager.compounded_capital <= 0:
+            bal = self.connector.get_balance()
+            if bal:
+                self.risk_manager.update_balance(float(bal.get('total', 0) or 0))
 
-            # Warning: B3 _execute_trade treats signal.side as string 'LONG' or 'SHORT'.
-            # Validation: engine.py line 135: side = signal.side # 'LONG'
-            
-            target_side = 'LONG' if side_str == 'BUY' else 'SHORT'
-            
-            # SL/TP: 3% / 6% (Anchor logic)
-            sl = price * (0.97 if target_side == 'LONG' else 1.03)
-            tp = price * (1.06 if target_side == 'LONG' else 0.94)
+        target_side = 'LONG' if side_str == 'BUY' else 'SHORT'
+        
+        # SL/TP: 3% / 6% (Anchor logic)
+        sl = price * (0.97 if target_side == 'LONG' else 1.03)
+        tp = price * (1.06 if target_side == 'LONG' else 0.94)
 
-            signal = MockSignal(symbol, target_side, price, sl, tp, "TvWebhook")
-            
-            # Qty
-            qty = self.risk_manager.calculate_position_size(price, self.CONFIG['max_leverage'])
-            
-            await self._execute_trade(signal, qty)
-            logger.info("✅ B3 External Signal Executed")
+        # Mock Signal Object (B3 _execute_trade espera .symbol, .side, .stop_loss, .take_profit)
+        class MockSignal:
+            def __init__(self, s, side, ep, sl, tp, reason):
+                self.symbol = s
+                self.side = side
+                self.entry_price = ep
+                self.stop_loss = sl
+                self.take_profit = tp
+                self.reason = reason
 
-        except Exception as e:
-            logger.error(f"❌ Error procesando señal externa B3: {e}")
+        signal = MockSignal(symbol, target_side, price, sl, tp, "TvWebhook")
+        
+        # Calcular cantidad
+        qty = self.risk_manager.calculate_position_size(price, self.CONFIG['max_leverage'])
+        
+        # Ejecutar trade — dejar que excepciones se propaguen al webhook
+        await self._execute_trade(signal, qty)
+        logger.info("✅ B3 External Signal Executed")
 
     async def on_candle_closed(self, event: Dict):
         """B3 Passive Logic (4H trigger)."""
@@ -232,3 +225,4 @@ class B3AnchorEngine:
             
         except Exception as e:
             logger.error(f"❌ Error executing trade {symbol}: {e}")
+            raise
