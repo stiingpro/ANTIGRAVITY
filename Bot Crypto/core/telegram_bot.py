@@ -1,4 +1,5 @@
 import os
+import math
 import logging
 import asyncio
 from datetime import datetime
@@ -69,6 +70,7 @@ class TelegramInterface:
             ("closeb1", self.cmd_closeb1),
             ("closeb2", self.cmd_closeb2),
             ("closeb3", self.cmd_closeb3),
+            ("tendencia", self.cmd_tendencia),
         ]
         for cmd_name, handler in commands:
             self.dp.message(Command(cmd_name))(handler)
@@ -129,7 +131,9 @@ class TelegramInterface:
             "/kill — 🛑 Emergencia: Detener todo\n"
             "/closeb1 — 🏎 Cerrar posiciones de B1\n"
             "/closeb2 — 🛡 Cerrar posiciones de B2\n"
-            "/closeb3 — ⚓ Cerrar posiciones de B3",
+            "/closeb3 — ⚓ Cerrar posiciones de B3\n\n"
+            "🔍 *Análisis:*\n"
+            "/tendencia — 📈 Anal. Bull/Bear (BTC+ETH)",
             parse_mode="Markdown"
         )
 
@@ -455,3 +459,234 @@ class TelegramInterface:
         except Exception as e:
             await message.answer(f"❌ Error crítico procesando cierre de {target_bot}: {e}")
             logger.error(f"Exception in _close_by_bot: {e}")
+
+    # ═══════════════════════════════════════════════════
+    #  COMANDO /tendencia — Análisis Bull/Bear Macro
+    # ═══════════════════════════════════════════════════
+
+    async def cmd_tendencia(self, message: types.Message):
+        """Analiza BTC y ETH con 4 indicadores para determinar bull/bear."""
+        try:
+            await message.answer("🔍 Analizando tendencia macro (BTC + ETH)...")
+            
+            connector = self.orchestrator.exchange
+            symbols = ['BTCUSDT', 'ETHUSDT']
+            results = []
+            
+            for symbol in symbols:
+                try:
+                    # Obtener 300 velas 4H (suficiente para EMA200)
+                    klines = connector.client.futures_klines(
+                        symbol=symbol, interval='4h', limit=300
+                    )
+                    if not klines or len(klines) < 210:
+                        results.append({'symbol': symbol, 'error': 'Datos insuficientes'})
+                        continue
+                    
+                    closes = [float(k[4]) for k in klines]
+                    highs  = [float(k[2]) for k in klines]
+                    lows   = [float(k[3]) for k in klines]
+                    price  = closes[-1]
+                    
+                    # 1. EMA 200 (Precio vs EMA200)
+                    ema200 = self._calc_ema(closes, 200)
+                    ema200_bull = price > ema200
+                    ema200_dist = abs(price - ema200) / ema200 * 100
+                    
+                    # 2. EMA 50/200 Cross
+                    ema50 = self._calc_ema(closes, 50)
+                    prev_ema50 = self._calc_ema(closes[:-1], 50)
+                    prev_ema200 = self._calc_ema(closes[:-1], 200)
+                    cross_bull = ema50 > ema200  # EMA50 está arriba
+                    
+                    # 3. ADX (14) — fuerza de tendencia
+                    adx_val, di_plus, di_minus = self._calc_adx(highs, lows, closes, 14)
+                    adx_bull = di_plus > di_minus
+                    has_trend = adx_val > 25
+                    
+                    # 4. RSI (14)
+                    rsi = self._calc_rsi(closes, 14)
+                    rsi_bull = rsi > 50
+                    
+                    # ═══ SCORING ═══
+                    # Cada indicador tiene peso. Total = 100%
+                    # EMA200: 30%, Cross EMA50/200: 25%, ADX: 25%, RSI: 20%
+                    bull_score = 0.0
+                    details = []
+                    
+                    # EMA200 (30%)
+                    if ema200_bull:
+                        bull_score += 30
+                        details.append(f"✅ Precio > EMA200 (+{ema200_dist:.1f}%)")
+                    else:
+                        details.append(f"❌ Precio < EMA200 (-{ema200_dist:.1f}%)")
+                    
+                    # Cross (25%)
+                    if cross_bull:
+                        bull_score += 25
+                        details.append("✅ EMA50 > EMA200 (Golden)")
+                    else:
+                        details.append("❌ EMA50 < EMA200 (Death)")
+                    
+                    # ADX (25%)
+                    if has_trend:
+                        if adx_bull:
+                            bull_score += 25
+                            details.append(f"✅ ADX={adx_val:.0f} DI+>DI- (Trend↑)")
+                        else:
+                            details.append(f"❌ ADX={adx_val:.0f} DI->DI+ (Trend↓)")
+                    else:
+                        bull_score += 12.5  # Neutral cuando no hay tendencia clara
+                        details.append(f"⚠️ ADX={adx_val:.0f} (Sin tendencia clara)")
+                    
+                    # RSI (20%)
+                    if rsi_bull:
+                        bull_score += 20
+                        details.append(f"✅ RSI={rsi:.0f} > 50 (Momentum↑)")
+                    else:
+                        details.append(f"❌ RSI={rsi:.0f} < 50 (Momentum↓)")
+                    
+                    regime = "BULL 🟢" if bull_score >= 50 else "BEAR 🔴"
+                    confidence = bull_score if bull_score >= 50 else (100 - bull_score)
+                    
+                    results.append({
+                        'symbol': symbol,
+                        'regime': regime,
+                        'confidence': confidence,
+                        'bull_score': bull_score,
+                        'price': price,
+                        'ema200': ema200,
+                        'adx': adx_val,
+                        'rsi': rsi,
+                        'details': details,
+                    })
+                except Exception as e:
+                    results.append({'symbol': symbol, 'error': str(e)})
+            
+            # ═══ FORMATEAR RESPUESTA ═══
+            msg = "📊 *ANÁLISIS DE TENDENCIA MACRO*\n"
+            msg += f"⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            overall_bull = 0
+            valid_count = 0
+            
+            for r in results:
+                if 'error' in r:
+                    msg += f"⚠️ *{r['symbol']}*: Error — {r['error']}\n\n"
+                    continue
+                
+                valid_count += 1
+                overall_bull += r['bull_score']
+                
+                msg += f"*{r['symbol']}* — {r['regime']} ({r['confidence']:.0f}%)\n"
+                msg += f"💲 Precio: ${r['price']:,.2f}\n"
+                for d in r['details']:
+                    msg += f"  {d}\n"
+                msg += "\n"
+            
+            # ═══ RESULTADO GLOBAL ═══
+            if valid_count > 0:
+                avg_bull = overall_bull / valid_count
+                global_regime = "BULL 🟢" if avg_bull >= 50 else "BEAR 🔴"
+                global_conf = avg_bull if avg_bull >= 50 else (100 - avg_bull)
+                
+                msg += "━━━━━━━━━━━━━━━━━━━━\n"
+                msg += f"🌐 *MERCADO GLOBAL: {global_regime} {global_conf:.0f}%*\n"
+                msg += f"📈 Indicadores Bull: {avg_bull:.0f}/100\n"
+                
+                if avg_bull >= 75:
+                    msg += "💡 _Tendencia alcista fuerte. Estrategias LONG favorecidas._"
+                elif avg_bull >= 50:
+                    msg += "💡 _Tendencia alcista moderada. Operar con cautela._"
+                elif avg_bull >= 25:
+                    msg += "💡 _Tendencia bajista moderada. Estrategias SHORT favorecidas._"
+                else:
+                    msg += "💡 _Tendencia bajista fuerte. Máxima precaución con LONGs._"
+            
+            await message.answer(msg, parse_mode="Markdown")
+            
+        except Exception as e:
+            await message.answer(f"❌ Error en análisis de tendencia: {e}")
+            logger.error(f"Error in cmd_tendencia: {e}")
+
+    # ─── Helper: EMA ───
+    def _calc_ema(self, data, period):
+        if len(data) < period:
+            return data[-1]
+        k = 2 / (period + 1)
+        ema = sum(data[:period]) / period
+        for val in data[period:]:
+            ema = val * k + ema * (1 - k)
+        return ema
+
+    # ─── Helper: RSI ───
+    def _calc_rsi(self, closes, period=14):
+        if len(closes) < period + 1:
+            return 50
+        deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
+        gains = [d if d > 0 else 0 for d in deltas]
+        losses = [-d if d < 0 else 0 for d in deltas]
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        for i in range(period, len(deltas)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        if avg_loss == 0:
+            return 100
+        rs = avg_gain / avg_loss
+        return 100 - (100 / (1 + rs))
+
+    # ─── Helper: ADX ───
+    def _calc_adx(self, highs, lows, closes, period=14):
+        n = len(closes)
+        if n < period * 2:
+            return 20, 50, 50  # neutral defaults
+        
+        tr_list = []
+        plus_dm = []
+        minus_dm = []
+        
+        for i in range(1, n):
+            h = highs[i] - highs[i-1]
+            l = lows[i-1] - lows[i]
+            plus_dm.append(h if h > l and h > 0 else 0)
+            minus_dm.append(l if l > h and l > 0 else 0)
+            tr_list.append(max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i-1]),
+                abs(lows[i] - closes[i-1])
+            ))
+        
+        # Smoothed
+        atr = sum(tr_list[:period]) / period
+        sdm_plus = sum(plus_dm[:period]) / period
+        sdm_minus = sum(minus_dm[:period]) / period
+        
+        di_plus_list = []
+        di_minus_list = []
+        dx_list = []
+        
+        for i in range(period, len(tr_list)):
+            atr = (atr * (period - 1) + tr_list[i]) / period
+            sdm_plus = (sdm_plus * (period - 1) + plus_dm[i]) / period
+            sdm_minus = (sdm_minus * (period - 1) + minus_dm[i]) / period
+            
+            di_p = (sdm_plus / atr * 100) if atr > 0 else 0
+            di_m = (sdm_minus / atr * 100) if atr > 0 else 0
+            di_plus_list.append(di_p)
+            di_minus_list.append(di_m)
+            
+            di_sum = di_p + di_m
+            dx = abs(di_p - di_m) / di_sum * 100 if di_sum > 0 else 0
+            dx_list.append(dx)
+        
+        if len(dx_list) < period:
+            return 20, 50, 50
+        
+        adx = sum(dx_list[:period]) / period
+        for i in range(period, len(dx_list)):
+            adx = (adx * (period - 1) + dx_list[i]) / period
+        
+        return adx, di_plus_list[-1] if di_plus_list else 50, di_minus_list[-1] if di_minus_list else 50
+
