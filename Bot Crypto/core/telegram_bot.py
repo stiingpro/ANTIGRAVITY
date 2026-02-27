@@ -469,7 +469,7 @@ class TelegramInterface:
         try:
             await message.answer("🔍 Analizando tendencia macro (BTC + ETH)...")
             
-            connector = self.orchestrator.exchange
+            connector = self.orchestrator.connector
             symbols = ['BTCUSDT', 'ETHUSDT']
             results = []
             
