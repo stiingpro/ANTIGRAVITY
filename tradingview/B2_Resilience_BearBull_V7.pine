@@ -1,0 +1,156 @@
+// ═══════════════════════════════════════════════════════════════
+// B2 RESILIENCE V7 — Bear/Bull Dual Parameter Sets
+// ═══════════════════════════════════════════════════════════════
+// Timeframe: 1H (Execution) + 4H (Macro Direction)
+// Macro: EMA 200 (4H) determina régimen Bull/Bear
+// En Bear: TP más corto, SL más ajustado, leverage reducido
+// Activos: SOLUSDT, AVAXUSDT, DOTUSDT, ETHUSDT
+// ═══════════════════════════════════════════════════════════════
+
+//@version=5
+strategy("B2 Resilience V7 — Dual Params", overlay=true,
+     default_qty_type=strategy.percent_of_equity, default_qty_value=3,
+     initial_capital=1000, commission_value=0.04, pyramiding=0)
+
+// ─── INPUTS ───
+ema_fast  = input.int(20,  "EMA Rápida (1H)")
+ema_slow  = input.int(50,  "EMA Lenta (1H)")
+ema_macro = input.int(200, "EMA Macro (4H)")
+rsi_period = input.int(14, "RSI Periodo")
+atr_period = input.int(14, "ATR Periodo")
+
+// ─── BULL PARAMS ───
+bull_sl_mult   = input.float(2.0, "Bull: SL ATR Mult", group="Bull Parameters")
+bull_tp_mult   = input.float(4.0, "Bull: TP ATR Mult", group="Bull Parameters")
+bull_rsi_l_min = input.int(40,    "Bull: RSI Long Min", group="Bull Parameters")
+bull_rsi_l_max = input.int(70,    "Bull: RSI Long Max", group="Bull Parameters")
+bull_rsi_s_min = input.int(30,    "Bull: RSI Short Min", group="Bull Parameters")
+bull_rsi_s_max = input.int(60,    "Bull: RSI Short Max", group="Bull Parameters")
+bull_min_str   = input.float(0.55,"Bull: Fuerza Mínima", group="Bull Parameters")
+
+// ─── BEAR PARAMS ───
+bear_sl_mult   = input.float(1.5, "Bear: SL ATR Mult", group="Bear Parameters")
+bear_tp_mult   = input.float(3.0, "Bear: TP ATR Mult", group="Bear Parameters")
+bear_rsi_l_min = input.int(45,    "Bear: RSI Long Min", group="Bear Parameters")
+bear_rsi_l_max = input.int(65,    "Bear: RSI Long Max", group="Bear Parameters")
+bear_rsi_s_min = input.int(25,    "Bear: RSI Short Min", group="Bear Parameters")
+bear_rsi_s_max = input.int(55,    "Bear: RSI Short Max", group="Bear Parameters")
+bear_min_str   = input.float(0.60,"Bear: Fuerza Mínima", group="Bear Parameters")
+
+// ─── 4H MACRO DIRECTION ───
+ema200_4h = request.security(syminfo.tickerid, "240", ta.ema(close, ema_macro))
+atr_4h    = request.security(syminfo.tickerid, "240", ta.atr(atr_period))
+
+is_bull = close > ema200_4h
+is_bear = close < ema200_4h
+
+// ─── DYNAMIC PARAM SELECTION ───
+sl_mult   = is_bull ? bull_sl_mult   : bear_sl_mult
+tp_mult   = is_bull ? bull_tp_mult   : bear_tp_mult
+rsi_l_min = is_bull ? bull_rsi_l_min : bear_rsi_l_min
+rsi_l_max = is_bull ? bull_rsi_l_max : bear_rsi_l_max
+rsi_s_min = is_bull ? bull_rsi_s_min : bear_rsi_s_min
+rsi_s_max = is_bull ? bull_rsi_s_max : bear_rsi_s_max
+min_str   = is_bull ? bull_min_str   : bear_min_str
+
+// ─── 1H INDICATORS ───
+ema20 = ta.ema(close, ema_fast)
+ema50 = ta.ema(close, ema_slow)
+
+bullish_cross = ta.crossover(ema20, ema50)
+bearish_cross = ta.crossunder(ema20, ema50)
+ema_above     = ema20 > ema50
+ema_below     = ema20 < ema50
+
+rsi = ta.rsi(close, rsi_period)
+
+// Volume confirmation
+vol_avg = ta.sma(volume, 20)
+vol_confirm = volume > vol_avg * 0.8
+
+// Distance from EMA200
+macro_dist_pct = math.abs(close - ema200_4h) / ema200_4h * 100
+
+// ─── SCORING LONG ───
+var float long_score = 0.0
+long_score := 0.0
+
+if is_bull
+    if bullish_cross
+        long_score := long_score + 0.35
+    else if ema_above
+        long_score := long_score + 0.15
+    if rsi >= rsi_l_min and rsi <= rsi_l_max
+        long_score := long_score + 0.20
+    if vol_confirm
+        long_score := long_score + 0.10
+    if macro_dist_pct > 2.0
+        long_score := long_score + 0.15
+    else if macro_dist_pct > 0.5
+        long_score := long_score + 0.10
+
+// ─── SCORING SHORT ───
+var float short_score = 0.0
+short_score := 0.0
+
+if is_bear
+    if bearish_cross
+        short_score := short_score + 0.35
+    else if ema_below
+        short_score := short_score + 0.15
+    if rsi >= rsi_s_min and rsi <= rsi_s_max
+        short_score := short_score + 0.20
+    if vol_confirm
+        short_score := short_score + 0.10
+    if macro_dist_pct > 2.0
+        short_score := short_score + 0.15
+    else if macro_dist_pct > 0.5
+        short_score := short_score + 0.10
+
+// ─── SL/TP CALCULATION ───
+sl_dist = atr_4h * sl_mult
+tp_dist = atr_4h * tp_mult
+
+// ─── SIGNALS ───
+long_signal  = long_score >= min_str and long_score > short_score
+short_signal = short_score >= min_str and short_score > long_score
+
+// ─── EXECUTION ───
+if long_signal and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    strategy.exit("TP/SL Long", "Long",
+         stop=close - sl_dist, limit=close + tp_dist)
+
+if short_signal and strategy.position_size == 0
+    strategy.entry("Short", strategy.short)
+    strategy.exit("TP/SL Short", "Short",
+         stop=close + sl_dist, limit=close - tp_dist)
+
+// ─── VISUAL ───
+plot(ema20, "EMA 20", color=color.new(color.lime, 0), linewidth=1)
+plot(ema50, "EMA 50", color=color.new(color.red, 0), linewidth=1)
+plot(ema200_4h, "EMA200 4H (Macro)", color=color.new(color.white, 0), linewidth=2, style=plot.style_stepline)
+
+bgcolor(is_bull ? color.new(color.green, 93) : color.new(color.red, 93))
+
+plotshape(long_signal  and strategy.position_size == 0, "LONG",  shape.triangleup,   location.belowbar, color.green, size=size.small)
+plotshape(short_signal and strategy.position_size == 0, "SHORT", shape.triangledown, location.abovebar, color.red,   size=size.small)
+
+// Info Table
+var table info = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 70))
+if barstate.islast
+    regime = is_bull ? "🟢 BULL" : "🔴 BEAR"
+    table.cell(info, 0, 0, "B2 Resilience V7", text_color=color.white, text_size=size.small)
+    table.cell(info, 1, 0, regime, text_color=is_bull ? color.green : color.red, text_size=size.small)
+    table.cell(info, 0, 1, "SL/TP Mult", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 1, str.tostring(sl_mult,"#.#") + "x / " + str.tostring(tp_mult,"#.#") + "x", text_color=color.white, text_size=size.tiny)
+    table.cell(info, 0, 2, "RSI Range", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 2, "L:" + str.tostring(rsi_l_min) + "-" + str.tostring(rsi_l_max) + " S:" + str.tostring(rsi_s_min) + "-" + str.tostring(rsi_s_max), text_color=color.white, text_size=size.tiny)
+    table.cell(info, 0, 3, "Long Score", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 3, str.tostring(long_score, "#.##"), text_color=color.green, text_size=size.tiny)
+    table.cell(info, 0, 4, "Short Score", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 4, str.tostring(short_score, "#.##"), text_color=color.red, text_size=size.tiny)
+
+// ─── ALERTAS WEBHOOK ───
+alertcondition(long_signal,  "B2 LONG Signal",  '{"engine":"B2","side":"BUY","symbol":"{{ticker}}","price":{{close}}}')
+alertcondition(short_signal, "B2 SHORT Signal", '{"engine":"B2","side":"SELL","symbol":"{{ticker}}","price":{{close}}}')

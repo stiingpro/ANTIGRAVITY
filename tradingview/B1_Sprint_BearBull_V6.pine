@@ -1,0 +1,151 @@
+// ═══════════════════════════════════════════════════════════════
+// B1 SPRINT V6 — Bear/Bull Directional Bias
+// ═══════════════════════════════════════════════════════════════
+// Timeframe: 5m (Execution) + 15m (Trend Gate)
+// Macro Bias: EMA 200 (1H) — favorece LONGs en bull, SHORTs en bear
+// Activos: SOLUSDT
+// Webhook: Compatible con Antigravity Trifecta
+// ═══════════════════════════════════════════════════════════════
+
+//@version=5
+strategy("B1 Sprint V6 — Bear/Bull Bias", overlay=true, 
+     default_qty_type=strategy.percent_of_equity, default_qty_value=5,
+     initial_capital=1000, commission_value=0.04, pyramiding=0)
+
+// ─── INPUTS ───
+ema_fast    = input.int(9,  "EMA Rápida (5m)")
+ema_slow    = input.int(21, "EMA Lenta (5m)")
+ema_macro   = input.int(200,"EMA Macro Bias (1H)", tooltip="Sesgo direccional: > EMA200 = Bull, < = Bear")
+bb_period   = input.int(20, "BB Periodo")
+bb_std      = input.float(2.0, "BB Desviación")
+rsi_period  = input.int(14, "RSI Periodo")
+min_score   = input.float(0.30, "Fuerza Mínima", step=0.05)
+bias_bonus  = input.float(0.10, "Bonus/Penalidad Macro", step=0.05, tooltip="Puntos que suma/resta el sesgo macro")
+
+// ─── SL/TP ───
+sl_pct = input.float(1.0, "Stop Loss %", step=0.1) / 100
+tp_pct = input.float(2.0, "Take Profit %", step=0.1) / 100
+
+// ─── INDICADORES 5m ───
+ema9  = ta.ema(close, ema_fast)
+ema21 = ta.ema(close, ema_slow)
+
+// Crossover 5m
+cross_bull_5m = ta.crossover(ema9, ema21)
+cross_bear_5m = ta.crossunder(ema9, ema21)
+spread_bull   = ema9 > ema21
+spread_bear   = ema9 < ema21
+spread_pct    = math.abs(ema9 - ema21) / ema21 * 100
+momentum_strong = spread_pct > 0.15
+
+// VWAP
+vwap_val = ta.vwap(hlc3)
+above_vwap = close > vwap_val
+below_vwap = close < vwap_val
+
+// Bollinger Bands
+[bb_u, bb_m, bb_l] = ta.bb(close, bb_period, bb_std)
+bb_break_up   = close > bb_u
+bb_break_down = close < bb_l
+
+// RSI
+rsi_val = ta.rsi(close, rsi_period)
+
+// ─── 15m TREND GATE ───
+ema9_15  = request.security(syminfo.tickerid, "15", ta.ema(close, ema_fast))
+ema21_15 = request.security(syminfo.tickerid, "15", ta.ema(close, ema_slow))
+trend_bull_15 = ema9_15 > ema21_15
+trend_bear_15 = ema9_15 < ema21_15
+
+// ─── 1H MACRO BIAS (NUEVO V6) ───
+ema200_1h = request.security(syminfo.tickerid, "60", ta.ema(close, ema_macro))
+macro_bull = close > ema200_1h
+macro_bear = close < ema200_1h
+
+// ─── SCORING ───
+var float long_score  = 0.0
+var float short_score = 0.0
+
+long_score  := 0.0
+short_score := 0.0
+
+// LONG scoring (requiere 15m trend gate alcista)
+if trend_bull_15
+    if cross_bull_5m
+        long_score := long_score + 0.35
+    else if spread_bull and momentum_strong
+        long_score := long_score + 0.20
+    if above_vwap
+        long_score := long_score + 0.15
+    if bb_break_up
+        long_score := long_score + 0.20
+    if rsi_val >= 35 and rsi_val <= 72
+        long_score := long_score + 0.10
+    if rsi_val > 82
+        long_score := long_score - 0.20
+
+// SHORT scoring (requiere 15m trend gate bajista)
+if trend_bear_15
+    if cross_bear_5m
+        short_score := short_score + 0.35
+    else if spread_bear and momentum_strong
+        short_score := short_score + 0.20
+    if below_vwap
+        short_score := short_score + 0.15
+    if bb_break_down
+        short_score := short_score + 0.20
+    if rsi_val >= 28 and rsi_val <= 65
+        short_score := short_score + 0.10
+    if rsi_val < 18
+        short_score := short_score - 0.20
+
+// ═══ MACRO BIAS ADJUSTMENT (V6 NEW) ═══
+if macro_bull
+    long_score  := long_score  + bias_bonus   // Favorece LONGs
+    short_score := short_score - bias_bonus   // Penaliza SHORTs
+if macro_bear
+    short_score := short_score + bias_bonus   // Favorece SHORTs
+    long_score  := long_score  - bias_bonus   // Penaliza LONGs
+
+// ─── SEÑALES ───
+long_signal  = long_score >= min_score and long_score > short_score
+short_signal = short_score >= min_score and short_score > long_score
+
+// ─── EJECUCIÓN ───
+if long_signal and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    strategy.exit("TP/SL Long", "Long", 
+         stop=close * (1 - sl_pct), limit=close * (1 + tp_pct))
+
+if short_signal and strategy.position_size == 0
+    strategy.entry("Short", strategy.short)
+    strategy.exit("TP/SL Short", "Short", 
+         stop=close * (1 + sl_pct), limit=close * (1 - tp_pct))
+
+// ─── VISUAL ───
+plot(ema9,  "EMA 9",  color=color.new(color.lime, 0), linewidth=1)
+plot(ema21, "EMA 21", color=color.new(color.red, 0), linewidth=1)
+plot(vwap_val, "VWAP", color=color.new(color.orange, 50), linewidth=1)
+plot(ema200_1h, "EMA200 1H (Macro)", color=color.new(color.white, 0), linewidth=2, style=plot.style_stepline)
+
+// Background bias
+bgcolor(macro_bull ? color.new(color.green, 93) : color.new(color.red, 93))
+
+// Labels
+plotshape(long_signal  and strategy.position_size == 0, "LONG",  shape.triangleup,   location.belowbar, color.green, size=size.small)
+plotshape(short_signal and strategy.position_size == 0, "SHORT", shape.triangledown, location.abovebar, color.red,   size=size.small)
+
+// Info Table
+var table info = table.new(position.top_right, 2, 3, bgcolor=color.new(color.black, 70))
+if barstate.islast
+    regime = macro_bull ? "🟢 BULL" : "🔴 BEAR"
+    table.cell(info, 0, 0, "B1 Sprint V6", text_color=color.white, text_size=size.small)
+    table.cell(info, 1, 0, regime, text_color=macro_bull ? color.green : color.red, text_size=size.small)
+    table.cell(info, 0, 1, "Long Score", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 1, str.tostring(long_score, "#.##"), text_color=color.green, text_size=size.tiny)
+    table.cell(info, 0, 2, "Short Score", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 2, str.tostring(short_score, "#.##"), text_color=color.red, text_size=size.tiny)
+
+// ─── ALERTAS WEBHOOK ───
+alertcondition(long_signal,  "B1 LONG Signal",  '{"engine":"B1","side":"BUY","symbol":"{{ticker}}","price":{{close}}}')
+alertcondition(short_signal, "B1 SHORT Signal", '{"engine":"B1","side":"SELL","symbol":"{{ticker}}","price":{{close}}}')

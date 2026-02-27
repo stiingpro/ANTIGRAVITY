@@ -202,10 +202,7 @@ class B3AnchorEngine:
         symbol = signal.symbol
         side = signal.side # 'LONG'
         
-        # B3 solo opera LONG en principio por diseño (Golden Cross)
-        # Pero si la estrategia diera SHORT (Death Cross inversion?), lo soportamos.
-        # Por ahora asumimos LONG.
-        
+        # B3 V7: Soporta LONG (Golden Cross Bull) y SHORT (Death Cross Bear)
         try:
             qty = self._round_qty(symbol, qty)
             if qty <= 0:

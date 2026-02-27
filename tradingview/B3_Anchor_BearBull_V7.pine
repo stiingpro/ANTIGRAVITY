@@ -1,0 +1,128 @@
+// ═══════════════════════════════════════════════════════════════
+// B3 ANCHOR V7 — Bear/Bull Dual Strategy
+// ═══════════════════════════════════════════════════════════════
+// Timeframe: 4H (Execution) + 1D (Macro Direction)
+// BULL: Golden Cross (EMA50 x EMA200 4H) → LONG
+// BEAR: Death Cross (EMA50 x EMA200 4H) → SHORT
+// SL/TP ajustados por régimen (bear = TP más rápido, SL más ajustado)
+// Activos: BTCUSDT, ETHUSDT, SOLUSDT, LINKUSDT, DOTUSDT
+// ═══════════════════════════════════════════════════════════════
+
+//@version=5
+strategy("B3 Anchor V7 — Dual Strategy", overlay=true,
+     default_qty_type=strategy.percent_of_equity, default_qty_value=5,
+     initial_capital=1000, commission_value=0.04, pyramiding=0)
+
+// ─── INPUTS ───
+ema_fast    = input.int(50,  "EMA Rápida (4H)")
+ema_slow    = input.int(200, "EMA Lenta (4H)")
+ema_macro   = input.int(200, "EMA Macro (1D)")
+bb_period   = input.int(20,  "BB Periodo")
+bb_std      = input.float(2.5, "BB Desviación")
+atr_period  = input.int(14,  "ATR Periodo")
+
+// ─── BULL SL/TP (para LONGs) ───
+bull_sl_atr = input.float(3.0, "Bull: SL ATR Mult", group="Bull Strategy", tooltip="SL holgado para swing largo")
+bull_tp_atr = input.float(6.0, "Bull: TP ATR Mult", group="Bull Strategy", tooltip="TP amplio para capturar tendencia")
+
+// ─── BEAR SL/TP (para SHORTs) ───
+bear_sl_atr = input.float(2.5, "Bear: SL ATR Mult", group="Bear Strategy", tooltip="SL más ajustado, los rebotes bajistas son violentos")
+bear_tp_atr = input.float(5.0, "Bear: TP ATR Mult", group="Bear Strategy", tooltip="TP agresivo, las caídas son rápidas")
+
+// ─── 1D MACRO DIRECTION ───
+ema200_daily = request.security(syminfo.tickerid, "1D", ta.ema(close, ema_macro))
+is_bull = close > ema200_daily
+is_bear = close < ema200_daily
+
+// ─── 4H INDICATORS ───
+ema50  = ta.ema(close, ema_fast)
+ema200 = ta.ema(close, ema_slow)
+
+// ATR for dynamic SL/TP
+atr_val = ta.atr(atr_period)
+
+// Bollinger Bands
+[bb_u, bb_m, bb_l] = ta.bb(close, bb_period, bb_std)
+
+// ─── CROSS DETECTION ───
+golden_cross = ta.crossover(ema50, ema200)   // EMA50 cruza ARRIBA de EMA200
+death_cross  = ta.crossunder(ema50, ema200)  // EMA50 cruza ABAJO de EMA200
+
+// ─── EXHAUSTION DETECTION ───
+bull_exhaustion = close > bb_u   // Precio rompe banda superior (salir LONG)
+bear_exhaustion = close < bb_l   // Precio rompe banda inferior (salir SHORT)
+
+// ─── BULL STRATEGY: Golden Cross → LONG ───
+bull_entry = golden_cross and is_bull
+bull_sl    = close - (atr_val * bull_sl_atr)
+bull_tp    = close + (atr_val * bull_tp_atr)
+
+// ─── BEAR STRATEGY: Death Cross → SHORT ───
+bear_entry = death_cross and is_bear
+bear_sl    = close + (atr_val * bear_sl_atr)
+bear_tp    = close - (atr_val * bear_tp_atr)
+
+// ─── EXIT SIGNALS ───
+// Bull exits: Death Cross o BB Exhaustion superior
+bull_exit = (death_cross and is_bull) or (bull_exhaustion and strategy.position_size > 0)
+
+// Bear exits: Golden Cross o BB Exhaustion inferior
+bear_exit = (golden_cross and is_bear) or (bear_exhaustion and strategy.position_size < 0)
+
+// ─── EXECUTION ───
+// LONG entries (Bull market)
+if bull_entry and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    strategy.exit("TP/SL Long", "Long", stop=bull_sl, limit=bull_tp)
+
+// SHORT entries (Bear market) — NUEVO V7
+if bear_entry and strategy.position_size == 0
+    strategy.entry("Short", strategy.short)
+    strategy.exit("TP/SL Short", "Short", stop=bear_sl, limit=bear_tp)
+
+// Early exits
+if bull_exit and strategy.position_size > 0
+    strategy.close("Long", comment="Exit: DC/Exhaustion")
+
+if bear_exit and strategy.position_size < 0
+    strategy.close("Short", comment="Exit: GC/Exhaustion")
+
+// ─── VISUAL ───
+plot(ema50,  "EMA 50",  color=color.new(color.lime, 0), linewidth=2)
+plot(ema200, "EMA 200", color=color.new(color.red, 0),  linewidth=2)
+plot(ema200_daily, "EMA200 Daily (Macro)", color=color.new(color.white, 0), linewidth=3, style=plot.style_stepline)
+
+// BB bands
+p_bbu = plot(bb_u, "BB Upper", color=color.new(color.blue, 70))
+p_bbl = plot(bb_l, "BB Lower", color=color.new(color.blue, 70))
+fill(p_bbu, p_bbl, color=color.new(color.blue, 92))
+
+// Background regime
+bgcolor(is_bull ? color.new(color.green, 93) : color.new(color.red, 93))
+
+// Entry markers
+plotshape(bull_entry and strategy.position_size == 0, "Golden Cross LONG",  shape.triangleup,   location.belowbar, color.green, size=size.normal, text="GC")
+plotshape(bear_entry and strategy.position_size == 0, "Death Cross SHORT",  shape.triangledown, location.abovebar, color.red,   size=size.normal, text="DC")
+
+// Exit markers
+plotshape(bull_exit and strategy.position_size > 0, "Exit Long",  shape.xcross, location.abovebar, color.orange, size=size.tiny)
+plotshape(bear_exit and strategy.position_size < 0, "Exit Short", shape.xcross, location.belowbar, color.orange, size=size.tiny)
+
+// Info Table
+var table info = table.new(position.top_right, 2, 4, bgcolor=color.new(color.black, 70))
+if barstate.islast
+    regime = is_bull ? "🟢 BULL (LONG)" : "🔴 BEAR (SHORT)"
+    sl_m = is_bull ? bull_sl_atr : bear_sl_atr
+    tp_m = is_bull ? bull_tp_atr : bear_tp_atr
+    table.cell(info, 0, 0, "B3 Anchor V7", text_color=color.white, text_size=size.small)
+    table.cell(info, 1, 0, regime, text_color=is_bull ? color.green : color.red, text_size=size.small)
+    table.cell(info, 0, 1, "Strategy", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 1, is_bull ? "Golden Cross → LONG" : "Death Cross → SHORT", text_color=color.white, text_size=size.tiny)
+    table.cell(info, 0, 2, "SL/TP ATR", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 2, str.tostring(sl_m,"#.#") + "x / " + str.tostring(tp_m,"#.#") + "x", text_color=color.white, text_size=size.tiny)
+    table.cell(info, 0, 3, "ATR Value", text_color=color.gray, text_size=size.tiny)
+    table.cell(info, 1, 3, "$" + str.tostring(atr_val, "#.##"), text_color=color.white, text_size=size.tiny)
+
+// ─── ALERTAS WEBHOOK ───
+alertcondition(bull_entry, "B3 LONG Signal",  '{"engine":"B3","side":"BUY","symbol":"{{ticker}}","price":{{close}}}')
+alertcondition(bear_entry, "B3 SHORT Signal", '{"engine":"B3","side":"SELL","symbol":"{{ticker}}","price":{{close}}}')

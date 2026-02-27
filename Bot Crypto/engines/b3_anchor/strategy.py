@@ -7,13 +7,26 @@ TradeSignal = namedtuple('TradeSignal', ['symbol', 'side', 'entry_price', 'stop_
 
 class B3Strategy:
     """
-    B3 ANCHOR STRATEGY
-    Trend Momentum (Institutional)
+    B3 ANCHOR STRATEGY V7 — Bear/Bull Dual Strategy
     
     Timeframes:
-    - 1D: Trend Filter (Price > EMA 200)
+    - 1D: Trend Filter (Price vs EMA 200) → determina régimen BULL/BEAR
     - 4H: Execution (EMA 50/200 Cross + Bollinger)
+    
+    BULL: Golden Cross (EMA50 x EMA200 4H) → LONG
+    BEAR: Death Cross (EMA50 x EMA200 4H) → SHORT
     """
+    
+    # Parámetros por régimen
+    BULL_PARAMS = {
+        'sl_atr_mult': 3.0,   # SL holgado para swing largo
+        'tp_atr_mult': 6.0,   # TP amplio para capturar tendencia
+    }
+    
+    BEAR_PARAMS = {
+        'sl_atr_mult': 2.5,   # SL más ajustado (rebotes bajistas son violentos)
+        'tp_atr_mult': 5.0,   # TP agresivo (caídas son rápidas)
+    }
     
     def __init__(self, config: Dict):
         self.config = config
@@ -35,21 +48,22 @@ class B3Strategy:
         if len(df_4h) < self.ema_slow or len(df_1d) < self.ema_slow:
             return None
             
-        # 2. Macro Trend Filter (1D)
-        # Solo operar LONG si estamos sobre la EMA 200 Diaria
+        # 2. Macro Trend Filter (1D) — Determina régimen
         macro_ema_200 = ind.calculate_ema(df_1d['close'], self.ema_slow).iloc[-1]
         current_price = df_4h['close'].iloc[-1]
         
-        if current_price < macro_ema_200:
-            return None # Tendencia Macro Bajista - NO TRADE (Solo Longs en Spot/Swing)
+        is_bull = current_price > macro_ema_200
+        is_bear = current_price < macro_ema_200
+        
+        # Seleccionar parámetros según régimen
+        params = self.BULL_PARAMS if is_bull else self.BEAR_PARAMS
             
         # 3. Indicadores 4H
-        # EMA Cross
         ema_fast_series = ind.calculate_ema(df_4h['close'], self.ema_fast)
         ema_slow_series = ind.calculate_ema(df_4h['close'], self.ema_slow)
         
-        # Bollinger Bands (para agotamiento)
-        bb_upper, _, _ = ind.calculate_bbands(df_4h['close'], self.bb_period, self.bb_std)
+        # Bollinger Bands
+        bb_upper, _, bb_lower = ind.calculate_bbands(df_4h['close'], self.bb_period, self.bb_std)
         
         # ATR (para SL/TP)
         atr_series = ind.calculate_atr(df_4h['high'], df_4h['low'], df_4h['close'], self.atr_period)
@@ -61,16 +75,14 @@ class B3Strategy:
         prev_fast = ema_fast_series.iloc[-2]
         prev_slow = ema_slow_series.iloc[-2]
         
-        # 4. Señal de Entrada (Golden Cross 4H)
-        # Cruce alcista: Fast cruza arriba de Slow
+        # Detección de cruces
         golden_cross = (prev_fast <= prev_slow) and (curr_fast > curr_slow)
+        death_cross = (prev_fast >= prev_slow) and (curr_fast < curr_slow)
         
-        if golden_cross:
-            # Calcular SL / TP Institucional
-            # SL: 3x ATR bajo el precio (holgado)
-            # TP: Abierto (Trailing) o objetivo fijo 5x ATR
-            stop_loss = current_price - (atr_val * 3.0)
-            take_profit = current_price + (atr_val * 6.0) # Ratio 1:2 inicial
+        # ═══ BULL STRATEGY: Golden Cross → LONG ═══
+        if is_bull and golden_cross:
+            stop_loss = current_price - (atr_val * params['sl_atr_mult'])
+            take_profit = current_price + (atr_val * params['tp_atr_mult'])
             
             return TradeSignal(
                 symbol=symbol,
@@ -81,19 +93,39 @@ class B3Strategy:
                 reason='Golden Cross 4H + Macro Bull',
                 strength=1.0
             )
-            
-        # 5. Señal de Salida (Exit Logic - Para gestión de posiciones abiertas, 
-        # aunque el motor maneja TP/SL, la estrategia puede sugerir cierre anticipado)
-        # Death Cross o Exhaustion
-        death_cross = (prev_fast >= prev_slow) and (curr_fast < curr_slow)
-        bb_u = bb_upper.iloc[-1]
-        exhaustion = current_price > bb_u # Precio rompió banda superior con fuerza
         
-        if death_cross:
-            return TradeSignal(symbol, 'EXIT_LONG', current_price, 0, 0, 'Death Cross 4H', 1.0)
+        # ═══ BEAR STRATEGY: Death Cross → SHORT (NUEVO V7) ═══
+        if is_bear and death_cross:
+            stop_loss = current_price + (atr_val * params['sl_atr_mult'])
+            take_profit = current_price - (atr_val * params['tp_atr_mult'])
             
-        if exhaustion:
-            return TradeSignal(symbol, 'EXIT_LONG', current_price, 0, 0, 'Bollinger Exhaustion', 0.8)
+            return TradeSignal(
+                symbol=symbol,
+                side='SHORT',
+                entry_price=current_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                reason='Death Cross 4H + Macro Bear',
+                strength=1.0
+            )
+        
+        # ═══ EXIT SIGNALS ═══
+        bb_u = bb_upper.iloc[-1]
+        bb_l = bb_lower.iloc[-1]
+        
+        # Exit LONG: Death Cross en bull o BB upper exhaustion
+        if is_bull and death_cross:
+            return TradeSignal(symbol, 'EXIT_LONG', current_price, 0, 0, 'Death Cross 4H (Bull Exit)', 1.0)
+        
+        if is_bull and current_price > bb_u:
+            return TradeSignal(symbol, 'EXIT_LONG', current_price, 0, 0, 'Bollinger Upper Exhaustion', 0.8)
+        
+        # Exit SHORT: Golden Cross en bear o BB lower exhaustion
+        if is_bear and golden_cross:
+            return TradeSignal(symbol, 'EXIT_SHORT', current_price, 0, 0, 'Golden Cross 4H (Bear Exit)', 1.0)
+        
+        if is_bear and current_price < bb_l:
+            return TradeSignal(symbol, 'EXIT_SHORT', current_price, 0, 0, 'Bollinger Lower Exhaustion', 0.8)
             
         return None
 

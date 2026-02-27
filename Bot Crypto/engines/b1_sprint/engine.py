@@ -204,6 +204,8 @@ class B1SprintEngine:
                     d5 = await self._get_market_data(symbol, '5m')
                     # Data 15m
                     d15 = await self._get_market_data(symbol, '15m')
+                    # Data 1H (V6: Macro Bias)
+                    d1h = await self._get_market_data(symbol, '1h')
                     
                     if not d5 or not d15:
                         continue
@@ -217,7 +219,7 @@ class B1SprintEngine:
                         continue
                     
                     # Analyze
-                    signal = self.strategy.analyze(d5, d15)
+                    signal = self.strategy.analyze(d5, d15, d1h)
                     
                     if signal:
                         # Calculate Quantity via Risk Manager

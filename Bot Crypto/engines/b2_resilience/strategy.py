@@ -25,7 +25,8 @@ logger = logging.getLogger('B2_Strategy')
 
 class B2Strategy:
     """
-    Estrategia V6 Dual-Timeframe EMA Crossover con RSI Divergence.
+    Estrategia V7 Dual-Timeframe EMA Crossover con RSI Divergence.
+    Bear/Bull Dual Parameter Sets.
     
     Combina:
     1. EMA(20)/EMA(50) crossover en 1H (timing de entrada/salida)
@@ -34,7 +35,27 @@ class B2Strategy:
     4. ATR(14) en 4H (sizing dinámico de SL/TP)
     5. Volumen como confirmación adicional
     6. RSI divergence como señal de salida anticipada
+    7. Parámetros dinámicos según régimen Bull/Bear
     """
+    
+    # Parámetros por régimen
+    BULL_PARAMS = {
+        'sl_atr_mult': 2.0,    # SL estándar
+        'tp_atr_mult': 4.0,    # TP amplio (R:R 1:2)
+        'rsi_long_min': 40, 'rsi_long_max': 70,
+        'rsi_short_min': 30, 'rsi_short_max': 60,
+        'min_strength': 0.55,
+        'max_leverage': 5,
+    }
+    
+    BEAR_PARAMS = {
+        'sl_atr_mult': 1.5,    # SL más ajustado (rebotes bajistas violentos)
+        'tp_atr_mult': 3.0,    # TP más corto (tomar ganancias rápido)
+        'rsi_long_min': 45, 'rsi_long_max': 65,   # Más restrictivo para LONGs
+        'rsi_short_min': 25, 'rsi_short_max': 55,  # Más amplio para SHORTs
+        'min_strength': 0.60,  # Barra más alta
+        'max_leverage': 4,     # Leverage conservador
+    }
     
     def __init__(self, config: Dict):
         # EMA (1H)
@@ -46,18 +67,11 @@ class B2Strategy:
         
         # RSI
         self.rsi_period = config.get('rsi_period', 14)
-        self.rsi_long_min = config.get('rsi_long_min', 40)
-        self.rsi_long_max = config.get('rsi_long_max', 70)
-        self.rsi_short_min = config.get('rsi_short_min', 30)
-        self.rsi_short_max = config.get('rsi_short_max', 60)
         
         # ATR
         self.atr_period = config.get('atr_period', 14)
-        self.sl_atr_mult = config.get('sl_atr_mult', 2.0)
-        self.tp_atr_mult = config.get('tp_atr_mult', 4.0)
         
         # Señal
-        self.min_strength = config.get('min_strength', 0.55)
         self.vol_threshold = config.get('vol_threshold', 0.8)
         self.vol_avg_period = 20
         
@@ -66,7 +80,6 @@ class B2Strategy:
         
         # Leverage
         self.min_leverage = config.get('min_leverage', 3)
-        self.max_leverage = config.get('max_leverage', 5)
     
     def analyze(self, market_data_1h: Dict, market_data_4h: Dict):
         """
@@ -114,6 +127,17 @@ class B2Strategy:
         macro_bearish = price_4h < ema200_4h
         macro_dist_pct = abs(price_4h - ema200_4h) / ema200_4h * 100 if ema200_4h > 0 else 0
         
+        # ========== V7: SELECCIÓN DINÁMICA DE PARAMS ==========
+        regime = self.BULL_PARAMS if macro_bullish else self.BEAR_PARAMS
+        sl_atr_mult = regime['sl_atr_mult']
+        tp_atr_mult = regime['tp_atr_mult']
+        rsi_long_min = regime['rsi_long_min']
+        rsi_long_max = regime['rsi_long_max']
+        rsi_short_min = regime['rsi_short_min']
+        rsi_short_max = regime['rsi_short_max']
+        min_strength = regime['min_strength']
+        max_leverage = regime['max_leverage']
+        
         # ========== 1H: EJECUCIÓN ==========
         
         # EMA crossover
@@ -138,9 +162,9 @@ class B2Strategy:
         rsi_div_bearish = self._check_rsi_divergence(closes_1h, 'bearish')
         rsi_div_bullish = self._check_rsi_divergence(closes_1h, 'bullish')
         
-        # SL/TP basado en ATR(4H)
-        sl_dist = atr_4h * self.sl_atr_mult if atr_4h > 0 else price * 0.02
-        tp_dist = atr_4h * self.tp_atr_mult if atr_4h > 0 else price * 0.04
+        # SL/TP basado en ATR(4H) con multiplicadores dinámicos
+        sl_dist = atr_4h * sl_atr_mult if atr_4h > 0 else price * 0.02
+        tp_dist = atr_4h * tp_atr_mult if atr_4h > 0 else price * 0.04
         
         prec = self._price_precision(symbol)
         
@@ -156,7 +180,7 @@ class B2Strategy:
                 long_score += 0.15
                 long_reasons.append("EMA20>50")
             
-            if self.rsi_long_min <= rsi <= self.rsi_long_max:
+            if rsi_long_min <= rsi <= rsi_long_max:
                 long_score += 0.20
                 long_reasons.append(f"RSI={rsi:.0f}")
             
@@ -187,7 +211,7 @@ class B2Strategy:
                 short_score += 0.15
                 short_reasons.append("EMA20<50")
             
-            if self.rsi_short_min <= rsi <= self.rsi_short_max:
+            if rsi_short_min <= rsi <= rsi_short_max:
                 short_score += 0.20
                 short_reasons.append(f"RSI={rsi:.0f}")
             
@@ -208,12 +232,12 @@ class B2Strategy:
         
         # ========== GENERAR SEÑAL ==========
         
-        if long_score >= self.min_strength and long_score > short_score:
+        if long_score >= min_strength and long_score > short_score:
             strength = min(long_score, 1.0)
             sl = round(price - sl_dist, prec)
             tp = round(price + tp_dist, prec)
             
-            leverage = self._dynamic_leverage(strength)
+            leverage = self._dynamic_leverage(strength, max_leverage)
             
             return TradeSignal(
                 symbol=symbol,
@@ -227,12 +251,12 @@ class B2Strategy:
                 leverage=leverage
             )
         
-        if short_score >= self.min_strength and short_score > long_score:
+        if short_score >= min_strength and short_score > long_score:
             strength = min(short_score, 1.0)
             sl = round(price + sl_dist, prec)
             tp = round(price - tp_dist, prec)
             
-            leverage = self._dynamic_leverage(strength)
+            leverage = self._dynamic_leverage(strength, max_leverage)
             
             return TradeSignal(
                 symbol=symbol,
@@ -297,14 +321,14 @@ class B2Strategy:
         
         return False
     
-    def _dynamic_leverage(self, strength: float) -> int:
-        """Leverage dinámico basado en fuerza de señal."""
+    def _dynamic_leverage(self, strength: float, max_leverage: int = 5) -> int:
+        """Leverage dinámico basado en fuerza de señal y régimen."""
         if strength >= 0.80:
-            return self.max_leverage      # 5x
+            return max_leverage
         elif strength >= 0.65:
-            return min(self.max_leverage, 4)  # 4x
+            return min(max_leverage, 4)
         else:
-            return self.min_leverage      # 3x
+            return self.min_leverage
     
     def _price_precision(self, symbol: str) -> int:
         prec_map = {

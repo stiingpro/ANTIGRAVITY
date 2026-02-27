@@ -1,7 +1,8 @@
 """
-B1_SPRINT Strategy V5.1 - Rigor Híbrido 6A
+B1_SPRINT Strategy V6 - Bear/Bull Macro Bias
 ==========================================
 Estrategia: 5m EMA Crossover + 15m Trend Confirmation
++ 1H EMA 200 Macro Directional Bias
 Activos: SOLUSDT (Optimized)
 """
 
@@ -14,16 +15,18 @@ logger = logging.getLogger('B1_Strategy')
 
 class B1Strategy:
     """
-    B1 V5.1 Strategy (Rigor Híbrido 6A).
+    B1 V6 Strategy (Bear/Bull Macro Bias).
     
     Timeframes:
     - 5m: Ejecución (EMA 9/21 Cross, VWAP, BB)
     - 15m: Confirmación (EMA 9/21 Trend Gate)
+    - 1H: Macro Bias (EMA 200 Directional Bias)
     
     Scoring:
     - Min Strength: 0.30
     - Trigger Principal: EMA Crossover (0.35)
     - Bonus: VWAP (0.15), BB Breakout (0.20), Volume (0.10)
+    - Macro Bias: +0.10 a favor del régimen, -0.10 en contra
     """
     
     def __init__(self, config: Dict):
@@ -35,13 +38,15 @@ class B1Strategy:
         self.bb_period = config.get('bb_period', 20)
         self.bb_std = config.get('bb_std', 2.0)
         self.vwap_lookback = config.get('vwap_lookback', 20)
-        self.min_strength = 0.30  # Threshold V5.1 Relaxed
+        self.ema_macro = config.get('ema_macro', 200)  # V6: Macro bias
+        self.bias_bonus = 0.10  # V6: Bonus/penalty macro
+        self.min_strength = 0.30  # Threshold
         
-        logger.info("⚡ Estrategia B1 V5.1 (Rigor Híbrido 6A) inicializada")
+        logger.info("⚡ Estrategia B1 V6 (Bear/Bull Macro Bias) inicializada")
 
-    def analyze(self, data_5m: Dict, data_15m: Dict) -> Optional[object]:
+    def analyze(self, data_5m: Dict, data_15m: Dict, data_1h: Dict = None) -> Optional[object]:
         """
-        Analizar datos de 5m y 15m para generar señal.
+        Analizar datos de 5m, 15m y opcionalmente 1H para generar señal.
         """
         from engines.b1_sprint.engine import TradeSignal, TradeSide
         
@@ -123,6 +128,19 @@ class B1Strategy:
             if bb_break_down:       short_score += 0.20
             if 28 <= rsi_val <= 65: short_score += 0.10
             if rsi_val < 18:        short_score -= 0.20
+
+        # ═══ V6: MACRO BIAS ADJUSTMENT ═══
+        # Calcular sesgo macro desde datos 1H si disponibles
+        if data_1h and 'klines' in data_1h:
+            c1h = [float(k[4]) for k in data_1h['klines']]
+            if len(c1h) >= self.ema_macro:
+                ema200_1h = self._ema(c1h, self.ema_macro)
+                if c5[-1] > ema200_1h:  # Bull regime
+                    long_score  += self.bias_bonus
+                    short_score -= self.bias_bonus
+                else:  # Bear regime
+                    short_score += self.bias_bonus
+                    long_score  -= self.bias_bonus
 
         # --- SIGNAL GENERATION ---
         
