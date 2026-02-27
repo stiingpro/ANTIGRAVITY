@@ -66,6 +66,9 @@ class TelegramInterface:
             ("sharpe", self.cmd_sharpe),
             ("kill", self.cmd_kill),
             ("local_positions", self.cmd_positions), # ALIAS LOCAL PARA BYPASS RAILWAY
+            ("closeb1", self.cmd_closeb1),
+            ("closeb2", self.cmd_closeb2),
+            ("closeb3", self.cmd_closeb3),
         ]
         for cmd_name, handler in commands:
             self.dp.message(Command(cmd_name))(handler)
@@ -123,7 +126,10 @@ class TelegramInterface:
             "/sharpe — Sharpe y Profit Factor\n"
             "/risk — Análisis de riesgo (MDD)\n\n"
             "⚠️ *Control:*\n"
-            "/kill — 🛑 Emergencia: Detener todo",
+            "/kill — 🛑 Emergencia: Detener todo\n"
+            "/closeb1 — 🏎 Cerrar posiciones de B1\n"
+            "/closeb2 — 🛡 Cerrar posiciones de B2\n"
+            "/closeb3 — ⚓ Cerrar posiciones de B3",
             parse_mode="Markdown"
         )
 
@@ -378,3 +384,74 @@ class TelegramInterface:
         """PANIC BUTTON: Detiene todo."""
         await message.answer("🛑 *KILL SWITCH ACTIVADO* 🛑\nDeteniendo motores...", parse_mode="Markdown")
         await self.orchestrator.emergency_stop("Manual Kill via Telegram")
+
+    async def cmd_closeb1(self, message: types.Message):
+        """Cerrar todas las posiciones de B1"""
+        await self._close_by_bot(message, "B1")
+
+    async def cmd_closeb2(self, message: types.Message):
+        """Cerrar todas las posiciones de B2"""
+        await self._close_by_bot(message, "B2")
+
+    async def cmd_closeb3(self, message: types.Message):
+        """Cerrar todas las posiciones de B3"""
+        await self._close_by_bot(message, "B3")
+
+    async def _close_by_bot(self, message: types.Message, target_bot: str):
+        """Lógica común para cerrar posiciones por bot"""
+        try:
+            positions = self.orchestrator.connector.get_open_positions()
+            if not positions:
+                await message.answer(f"ℹ️ No hay posiciones abiertas en el exchange.")
+                return
+
+            def get_source_tag(symbol):
+                sym = str(symbol).strip().upper()
+                if sym == 'SOLUSDT': return "B1"
+                if sym in ['DOTUSDT', 'AVAXUSDT']: return "B2"
+                if self.orchestrator.b1.position_manager and symbol in self.orchestrator.b1.position_manager.active_positions: return "B1"
+                if self.orchestrator.b2.position_manager and self.orchestrator.b2.position_manager.has_position(symbol): return "B2"
+                if symbol in self.orchestrator.b3.CONFIG['symbols']: return "B3"
+                return "Unknown"
+
+            closed_count = 0
+            for p in positions:
+                sym = p['symbol']
+                tag = get_source_tag(sym)
+                
+                if tag == target_bot:
+                    qty = p['quantity']
+                    side = p['side']
+                    close_side = 'SELL' if side == 'LONG' else 'BUY'
+                    
+                    await message.answer(f"🛠 Procesando cierre para {sym} ({target_bot})...")
+                    
+                    # 1. Cancel open orders (SL/TP)
+                    try:
+                        self.orchestrator.connector.client.futures_cancel_all_open_orders(symbol=sym)
+                        logger.info(f"Órdenes canceladas para {sym}")
+                    except Exception as e:
+                        logger.error(f"Error cancelando órdenes de {sym}: {e}")
+                    
+                    # 2. Add market close order
+                    try:
+                        self.orchestrator.connector.client.futures_create_order(
+                            symbol=sym,
+                            side=close_side,
+                            positionSide=side,
+                            type='MARKET',
+                            quantity=qty
+                        )
+                        await message.answer(f"✅ Posición cerrada con éxito: {sym} ({side})")
+                        closed_count += 1
+                        
+                        # Note: Local state in PositionManagers might need a tick to realize the position is gone,
+                        # but next logic cycle will clean it or webhook will process it.
+                    except Exception as e:
+                        await message.answer(f"❌ Error al ejecutar MARKET Close en {sym}: {e}")
+            
+            if closed_count == 0:
+                await message.answer(f"🔍 No se encontraron posiciones activas atribuidas a {target_bot}.")
+        except Exception as e:
+            await message.answer(f"❌ Error crítico procesando cierre de {target_bot}: {e}")
+            logger.error(f"Exception in _close_by_bot: {e}")
