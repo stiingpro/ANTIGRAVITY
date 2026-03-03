@@ -5,16 +5,24 @@ Ejecuta el motor B1 V5.1 en modo demostración/testnet.
 Activo: SOLUSDT
 Estrategia: 5m EMA/VWAP Execution + 15m Trend Confirmation
 Seguridad: Kill-Switch (-15%)
+Webhook: Escucha en puerto 8080 para señales TradingView
 
 Ejecutar: py run_b1_demo.py
 """
 
 import asyncio
 import logging
+import os
 import signal
 from datetime import datetime
+from dotenv import load_dotenv
 from exchange_connector import ExchangeConnector
 from engines.b1_sprint.engine import B1SprintEngine
+from core.webhook_server import WebhookServer
+from core.telegram_bot import TelegramInterface
+
+# Cargar variables de entorno
+load_dotenv('.env.testnet')
 
 # Configurar logging
 logging.basicConfig(
@@ -27,10 +35,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger('B1_RUNNER')
 
+
+class B1DemoOrchestrator:
+    """Shim orquestador para modo demo con Webhook + Telegram."""
+    
+    def __init__(self, connector, engine):
+        self.connector = connector
+        self.b1 = engine
+        self.b2 = None
+        self.b3 = None
+        self.telegram = TelegramInterface(self)
+        self.webhook = WebhookServer(self)
+    
+    def get_status_report(self):
+        state = self.b1.state.value if hasattr(self.b1.state, 'value') else str(self.b1.state)
+        return (
+            f"**B1 DEMO STATUS**\n"
+            f"B1 Sprint: {state}\n"
+            f"Mode: Standalone + Webhook"
+        )
+
+
 async def main():
     logger.info("=" * 60)
     logger.info("🚀 ANTIGRAVITY - B1 V5.1 SPRINT RUNNER")
     logger.info("   SOLUSDT | 5m/15m Hybrid | Kill-Switch Active")
+    logger.info("   Webhook: puerto 8080 | Telegram: Activo")
     logger.info("=" * 60)
     
     # Init Connector
@@ -42,7 +72,19 @@ async def main():
     # Init Engine
     engine = B1SprintEngine(connector, environment='testnet')
     
+    # Init Orchestrator Shim (Webhook + Telegram)
+    orchestrator = B1DemoOrchestrator(connector, engine)
+    
+    task = None
     try:
+        # Start Telegram
+        await orchestrator.telegram.start()
+        
+        # Start Webhook Server
+        port = int(os.getenv('PORT', 8080))
+        await orchestrator.webhook.start(port=port)
+        logger.info(f"🌍 Webhook activo en http://0.0.0.0:{port}/webhook")
+        
         # Start Engine
         task = asyncio.create_task(engine.start())
         
@@ -55,11 +97,10 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Error fatal: {e}")
     finally:
-        # Stop Engine
+        await orchestrator.webhook.stop()
         logger.info("🛑 Deteniendo motor...")
         await engine.stop()
-        # Cancel task if running
-        if not task.done():
+        if task and not task.done():
             task.cancel()
             try:
                 await task
@@ -68,3 +109,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

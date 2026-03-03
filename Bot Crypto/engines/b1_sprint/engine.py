@@ -165,17 +165,6 @@ class B1SprintEngine:
             
         except Exception as e:
             logger.error(f"B1 Passive Error: {e}")
-        
-        # Pre-configure leverage
-        for symbol in self.CONFIG['symbols']:
-            try:
-                self.connector.configure_margin(symbol)
-                self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
-            except Exception as e:
-                logger.error(f"Error configurando {symbol}: {e}")
-        
-        self.state = EngineState.RUNNING
-        await self._main_loop()
     
     async def stop(self):
         self.state = EngineState.STOPPED

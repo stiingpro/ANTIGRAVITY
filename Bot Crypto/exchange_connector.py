@@ -440,6 +440,43 @@ class ExchangeConnector:
             logger.error(f"❌ Error obteniendo posiciones: {str(e)}")
             raise
     
+    async def create_order(self, symbol: str, side: str, order_type: str, 
+                           quantity: float = None, stopPrice: float = None,
+                           closePosition: bool = False, positionSide: str = None,
+                           **kwargs) -> Dict:
+        """
+        Crear orden en Binance Futures.
+        Usado por B2/B3 process_external_signal.
+        """
+        if not self.connected:
+            raise RuntimeError("No conectado. Llamar connect() primero.")
+        
+        try:
+            params = {
+                'symbol': symbol,
+                'side': side,
+                'type': order_type,
+            }
+            if quantity is not None:
+                params['quantity'] = quantity
+            if stopPrice is not None:
+                params['stopPrice'] = round(stopPrice, 2)
+            if closePosition:
+                params['closePosition'] = 'true'
+            if positionSide:
+                if positionSide in ['BUY', 'SELL']:
+                    params['positionSide'] = 'LONG' if positionSide == 'BUY' else 'SHORT'
+                else:
+                    params['positionSide'] = positionSide
+            params.update(kwargs)
+            
+            order = self.client.futures_create_order(**params)
+            logger.info(f"✅ Orden creada: {side} {symbol} {order_type} | OID: {order.get('orderId')}")
+            return order
+        except Exception as e:
+            logger.error(f"❌ Error create_order {symbol}: {e}")
+            raise
+
     def test_connection(self) -> Dict:
         """
         Prueba completa de conexión.
