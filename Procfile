@@ -1,1 +1,1 @@
-worker: cd "Bot Crypto" && python main.py
+web: cd "Bot Crypto" && python main.py
