@@ -129,7 +129,7 @@ class B1SprintEngine:
         # Pre-configure leverage
         for symbol in self.CONFIG['symbols']:
             try:
-                # self.connector.configure_margin(symbol) # Assumed handled by connector or main
+                self.connector.configure_margin(symbol)
                 self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
             except Exception as e:
                 logger.warning(f"⚠️ Error config leverage {symbol}: {e}")
@@ -242,6 +242,10 @@ class B1SprintEngine:
         logger.info(f"📨 B1 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
         
         try:
+            bal = self.connector.get_balance()
+            if bal:
+                self.risk_manager.update_balance(float(bal.get('available', 0)))
+
             side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
             price = float(signal_data.get('price', 0))
             if price == 0:
@@ -270,6 +274,7 @@ class B1SprintEngine:
 
         except Exception as e:
             logger.error(f"❌ Error procesando señal externa B1: {e}")
+            raise
 
     async def _get_market_data(self, symbol, interval) -> Dict:
         try:
@@ -314,8 +319,11 @@ class B1SprintEngine:
             )
             if order:
                 logger.info(f"✅ Orden enviada: {signal.side.value} {signal.symbol} x {qty}")
+            else:
+                raise Exception("Position Manager devolvió None (Fallo en la orden)")
         except Exception as e:
             logger.error(f"Error ejecutando trade: {e}")
+            raise
 
     
     async def _update_positions(self):

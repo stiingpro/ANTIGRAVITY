@@ -174,9 +174,10 @@ class B2ResilienceEngine:
         self.start_balance = float(account.get('total', 0))
         logger.info(f"💰 Balance inicial: ${self.start_balance:,.2f}")
         
-        # 1. Configurar Leverage
+        # 1. Configurar Margin y Leverage
         for symbol in self.CONFIG['symbols']:
             try:
+                self.connector.configure_margin(symbol)
                 self.connector.change_leverage(symbol, self.CONFIG['max_leverage'])
             except Exception as e:
                 logger.warning(f"  ⚠️ {symbol} leverage: {e}")

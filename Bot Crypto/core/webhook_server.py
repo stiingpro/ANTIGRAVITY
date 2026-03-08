@@ -23,6 +23,7 @@ class WebhookServer:
         self.app = web.Application()
         self.app.add_routes([
             web.post('/webhook', self.handle_webhook),
+            web.post('/webhook/{engine_id}', self.handle_webhook),
             web.get('/', self.handle_health)
         ])
         self.runner = None

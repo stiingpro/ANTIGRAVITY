@@ -39,6 +39,12 @@ class B3AnchorEngine:
         logger.info(f"⚓ MOTOR B3 ANCHOR INICIADO [PASSIVE] ({len(self.CONFIG['symbols'])} Pares)")
         self.running = True
         
+        for symbol in self.CONFIG['symbols']:
+            try:
+                self.connector.configure_margin(symbol)
+            except Exception as e:
+                logger.warning(f"  ⚠️ {symbol} margin config: {e}")
+
         bal = await self.connector.get_balance() if asyncio.iscoroutinefunction(self.connector.get_balance) else self.connector.get_balance()
         if bal:
             self.risk_manager.update_balance(float(bal.get('total', 0) or 0))
@@ -67,10 +73,12 @@ class B3AnchorEngine:
             price = float(ticker['price'])
 
         # Asegurar que risk_manager tiene balance actualizado
-        if self.risk_manager.compounded_capital <= 0:
+        try:
             bal = self.connector.get_balance()
             if bal:
                 self.risk_manager.update_balance(float(bal.get('total', 0) or 0))
+        except Exception as e:
+            logger.warning(f"⚠️ B3 balance fetch: {e}")
 
         target_side = 'LONG' if side_str == 'BUY' else 'SHORT'
         
