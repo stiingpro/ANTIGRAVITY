@@ -125,6 +125,9 @@ class ExchangeConnector:
         self.connected = False
         self.client = None
         
+        # Cache de información del exchange
+        self._exchange_info = None
+        
         logger.info(f"🚀 Inicializando {motor} en {environment.upper()}")
         logger.info(f"   API URL: {self.config['api_url']}")
     
@@ -452,6 +455,15 @@ class ExchangeConnector:
             raise RuntimeError("No conectado. Llamar connect() primero.")
         
         try:
+            # Obtener y formatear precisiones si es posible antes de enviar
+            try:
+                if quantity is not None:
+                    quantity = self.format_quantity(symbol, quantity)
+                if stopPrice is not None:
+                    stopPrice = self.format_price(symbol, stopPrice)
+            except Exception as fmt_err:
+                logger.warning(f"⚠️ No se pudo formatear precisión ({fmt_err}), enviando como está.")
+
             params = {
                 'symbol': symbol,
                 'side': side,
@@ -460,7 +472,7 @@ class ExchangeConnector:
             if quantity is not None:
                 params['quantity'] = quantity
             if stopPrice is not None:
-                params['stopPrice'] = round(stopPrice, 2)
+                params['stopPrice'] = stopPrice
             if closePosition:
                 params['closePosition'] = 'true'
             if positionSide:
@@ -476,6 +488,58 @@ class ExchangeConnector:
         except Exception as e:
             logger.error(f"❌ Error create_order {symbol}: {e}")
             raise
+
+    def get_symbol_info(self, symbol: str) -> Optional[Dict]:
+        """Obtiene la información de exchange_info para un símbolo y la cachea."""
+        if not self.connected:
+            return None
+        
+        if self._exchange_info is None:
+            try:
+                self._exchange_info = self.client.futures_exchange_info()
+            except Exception as e:
+                logger.error(f"❌ Error obteniendo exchange_info: {e}")
+                return None
+                
+        for s in self._exchange_info.get('symbols', []):
+            if s['symbol'] == symbol:
+                return s
+        logger.warning(f"⚠️ Símbolo {symbol} no encontrado en exchange_info.")
+        return None
+
+    def format_quantity(self, symbol: str, quantity: float) -> float:
+        """Formatea la cantidad según la precisión (stepSize) permitida por el exchange para el símbolo."""
+        info = self.get_symbol_info(symbol)
+        if not info:
+             # Fallback a 3 decimales
+             return round(quantity, 3)
+             
+        for f in info['filters']:
+            if f['filterType'] == 'LOT_SIZE':
+                step_size = float(f['stepSize'])
+                # Formatear: redondea al múltiplo más cercano inferior de step_size
+                import math
+                precision = max(0, int(round(-math.log10(step_size))))
+                formatted_qty = math.floor(quantity / step_size) * step_size
+                return round(formatted_qty, precision)
+                
+        return round(quantity, 3) # Fallback
+
+    def format_price(self, symbol: str, price: float) -> float:
+        """Formatea el precio según la precisión (tickSize) permitida por el exchange para el símbolo."""
+        info = self.get_symbol_info(symbol)
+        if not info:
+             return round(price, 2)
+             
+        for f in info['filters']:
+            if f['filterType'] == 'PRICE_FILTER':
+                tick_size = float(f['tickSize'])
+                import math
+                precision = max(0, int(round(-math.log10(tick_size))))
+                formatted_price = math.floor(price / tick_size) * tick_size
+                return round(formatted_price, precision)
+                
+        return round(price, 2) # Fallback
 
     def test_connection(self) -> Dict:
         """

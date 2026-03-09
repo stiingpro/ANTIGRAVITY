@@ -219,33 +219,33 @@ class B3AnchorEngine:
             logger.info(f"⚓ EJECUTANDO B3: {side} {qty} {symbol}")
             
             # 1. Market Entry
-            order = self.connector.client.futures_create_order(
+            order = await self.connector.create_order(
                 symbol=symbol,
                 side='BUY' if side == 'LONG' else 'SELL',
                 positionSide='LONG' if side == 'LONG' else 'SHORT',
-                type='MARKET',
+                order_type='MARKET',
                 quantity=qty
             )
             logger.info(f"  ✅ Entry Filled: {order['orderId']}")
             
             # 2. Stop Loss
-            self.connector.client.futures_create_order(
+            await self.connector.create_order(
                 symbol=symbol,
                 side='SELL' if side == 'LONG' else 'BUY',
                 positionSide='LONG' if side == 'LONG' else 'SHORT',
-                type='STOP_MARKET',
-                stopPrice=round(signal.stop_loss, 2), # TODO: Precision dinamica
+                order_type='STOP_MARKET',
+                stopPrice=signal.stop_loss,
                 closePosition=True
             )
             logger.info(f"  🛑 SL Set: ${signal.stop_loss}")
             
             # 3. Take Profit
-            self.connector.client.futures_create_order(
+            await self.connector.create_order(
                 symbol=symbol,
                 side='SELL' if side == 'LONG' else 'BUY',
                 positionSide='LONG' if side == 'LONG' else 'SHORT',
-                type='TAKE_PROFIT_MARKET',
-                stopPrice=round(signal.take_profit, 2),
+                order_type='TAKE_PROFIT_MARKET',
+                stopPrice=signal.take_profit,
                 closePosition=True
             )
             logger.info(f"  🎯 TP Set: ${signal.take_profit}")

@@ -47,11 +47,11 @@ class B1PositionManager:
             
             # 1. Orden de mercado
             pos_side = 'LONG' if side == TradeSide.LONG else 'SHORT'
-            order = self.connector.client.futures_create_order(
+            order = await self.connector.create_order(
                 symbol=symbol,
                 side=side.value,
                 positionSide=pos_side,
-                type='MARKET',
+                order_type='MARKET',
                 quantity=quantity
             )
             
@@ -64,23 +64,23 @@ class B1PositionManager:
             
             # 2. Configurar Stop Loss
             sl_side = 'SELL' if side == TradeSide.LONG else 'BUY'
-            sl_order = self.connector.client.futures_create_order(
+            sl_order = await self.connector.create_order(
                 symbol=symbol,
                 side=sl_side,
                 positionSide=pos_side,
-                type='STOP_MARKET',
-                stopPrice=round(stop_loss, 2),
+                order_type='STOP_MARKET',
+                stopPrice=stop_loss,
                 closePosition=True
             )
             logger.info(f"🛑 Stop Loss @ ${stop_loss:.2f}")
             
             # 3. Configurar Take Profit
-            tp_order = self.connector.client.futures_create_order(
+            tp_order = await self.connector.create_order(
                 symbol=symbol,
                 side=sl_side,
                 positionSide=pos_side,
-                type='TAKE_PROFIT_MARKET',
-                stopPrice=round(take_profit, 2),
+                order_type='TAKE_PROFIT_MARKET',
+                stopPrice=take_profit,
                 closePosition=True
             )
             logger.info(f"🎯 Take Profit @ ${take_profit:.2f}")
@@ -124,11 +124,11 @@ class B1PositionManager:
             close_side = 'SELL' if position.side == TradeSide.LONG else 'BUY'
             pos_side = 'LONG' if position.side == TradeSide.LONG else 'SHORT'
             
-            order = self.connector.client.futures_create_order(
+            order = await self.connector.create_order(
                 symbol=symbol,
                 side=close_side,
                 positionSide=pos_side,
-                type='MARKET',
+                order_type='MARKET',
                 quantity=position.quantity
             )
             
@@ -186,12 +186,12 @@ class B1PositionManager:
             sl_side = 'SELL' if position.side == TradeSide.LONG else 'BUY'
             pos_side = 'LONG' if position.side == TradeSide.LONG else 'SHORT'
             
-            self.connector.client.futures_create_order(
+            await self.connector.create_order(
                 symbol=symbol,
                 side=sl_side,
                 positionSide=pos_side,
-                type='STOP_MARKET',
-                stopPrice=round(new_stop, 2),
+                order_type='STOP_MARKET',
+                stopPrice=new_stop,
                 closePosition=True
             )
             
