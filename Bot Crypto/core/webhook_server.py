@@ -22,9 +22,13 @@ class WebhookServer:
         self.orchestrator = orchestrator
         self.app = web.Application()
         self.app.add_routes([
+            web.post('/', self.handle_webhook),
             web.post('/webhook', self.handle_webhook),
-            web.post('/webhook/{engine_id}', self.handle_webhook),
-            web.get('/', self.handle_health)
+            web.post('/webhook/', self.handle_webhook),
+            web.post('/webhook/{tail:.*}', self.handle_webhook),
+            web.post('/{tail:.*}', self.handle_webhook),
+            web.get('/', self.handle_health),
+            web.get('/{tail:.*}', self.handle_health)
         ])
         self.runner = None
         self.site = None
@@ -73,6 +77,9 @@ class WebhookServer:
         # ─── Parse Signal ───
         engine_id = data.get('engine', '').upper()
         symbol = data.get('symbol', '').upper()
+        if symbol.endswith('.P'):
+            symbol = symbol[:-2]
+        
         side = data.get('side', '').upper()
         price = data.get('price')
 
