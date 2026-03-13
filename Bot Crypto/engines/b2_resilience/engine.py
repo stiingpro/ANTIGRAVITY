@@ -489,6 +489,12 @@ class B2ResilienceEngine:
             else:
                 effective_leverage = self.CONFIG['min_leverage']       # 3x
             
+            # Intercomunicador B3: Reduce leverage general en Régimen Bajista
+            from engines.b3_anchor.engine import B3AnchorEngine
+            if getattr(B3AnchorEngine, 'GLOBAL_REGIME', 'NORMAL') == 'BEAR':
+                effective_leverage = max(1, effective_leverage - 2)
+                logger.info(f"🛡️ Intercom B3 Activo: B2 leverage reducido a {effective_leverage}x (Régimen: BEAR)")
+            
             notional = margin * effective_leverage
             quantity = notional / signal.entry_price
             quantity = self._round_qty(signal.symbol, quantity)

@@ -249,8 +249,18 @@ class B1SprintEngine:
             side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
             price = float(signal_data.get('price', 0))
             if price == 0:
-                 ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
-                 price = float(ticker['price'])
+                 from core.data_feed import DataFeed
+                 price = DataFeed.LATEST_PRICES.get(symbol, 0)
+                 if price == 0: # Fallback a REST
+                     ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
+                     price = float(ticker['price'])
+
+            # Intercomunicador B3: Reduce apalancamiento si el mercado Macro es bajista oscuro
+            from engines.b3_anchor.engine import B3AnchorEngine
+            eff_lev = self.CONFIG['max_leverage']
+            if getattr(B3AnchorEngine, 'GLOBAL_REGIME', 'NORMAL') == 'BEAR':
+                eff_lev = max(1, eff_lev // 2)
+                logger.info(f"🛡️ Intercom B3 Activo: B1 ajustado a {eff_lev}x (Régimen: BEAR) para {symbol}")
 
             # Construct synthetic signal
             # SL/TP defaults: SL 1%, TP 2% (Sprint logic)
@@ -265,8 +275,8 @@ class B1SprintEngine:
                 reason=f"TvWebhook"
             )
             
-            # Calculate Qty
-            qty = self.risk_manager.calculate_quantity(price, self.CONFIG['max_leverage'])
+            # Calculate Qty with adjusted leverage
+            qty = self.risk_manager.calculate_quantity(price, eff_lev)
             
             # Execute
             await self._execute_trade(signal, qty)

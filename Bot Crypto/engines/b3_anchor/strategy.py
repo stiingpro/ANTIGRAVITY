@@ -55,6 +55,10 @@ class B3Strategy:
         is_bull = current_price > macro_ema_200
         is_bear = current_price < macro_ema_200
         
+        # Intercomunicador de Regímenes (Actualiza el estado macro global)
+        from .engine import B3AnchorEngine
+        B3AnchorEngine.GLOBAL_REGIME = "BULL" if is_bull else "BEAR"
+        
         # Seleccionar parámetros según régimen
         params = self.BULL_PARAMS if is_bull else self.BEAR_PARAMS
             

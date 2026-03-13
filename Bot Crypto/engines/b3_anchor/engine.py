@@ -15,6 +15,8 @@ class B3AnchorEngine:
     - Logic: Golden Cross + Compound Interest Safety
     """
     
+    GLOBAL_REGIME = "NORMAL" # Intercomunicador de Estado Macro
+    
     CONFIG = {
         'motor_id': 'B3_ANCHOR_V6A',
         'symbols': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'LINKUSDT', 'DOTUSDT'],

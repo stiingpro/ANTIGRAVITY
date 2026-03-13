@@ -70,14 +70,14 @@ class DataFeed:
                 logger.error(f"❌ WS Error: {e}. Reintentando en 5s...")
                 await asyncio.sleep(5)
 
+    LATEST_PRICES: Dict[str, float] = {}
+
     async def _dispatch(self, data: Dict):
         """Envía datos a todos los motores suscritos."""
         # data['k'] contains candle info
-        # k = data['k']
-        # is_closed = k['x']
-        # symbol = data['s']
-        # interval = k['i']
-        
+        if 'k' in data and 's' in data:
+            DataFeed.LATEST_PRICES[data['s']] = float(data['k']['c'])
+            
         for callback in self.subscribers:
             try:
                 # Fire and forget / await

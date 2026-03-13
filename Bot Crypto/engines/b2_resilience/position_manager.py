@@ -104,31 +104,26 @@ class B2PositionManager:
             return
         
         try:
-            # Mover SL a breakeven + 0.1%
-            if pos.side == TradeSide.LONG:
-                new_sl = pos.entry_price * 1.001  # BE + 0.1%
-            else:
-                new_sl = pos.entry_price * 0.999
-            
-            # Cancelar SL anterior y poner nuevo
             await connector.cancel_all_orders(symbol)
             
             sl_side = 'SELL' if pos.side == TradeSide.LONG else 'BUY'
+            pos_side = 'LONG' if pos.side == TradeSide.LONG else 'SHORT'
+            
             await connector.create_order(
                 symbol=symbol,
                 side=sl_side,
-                order_type='STOP_MARKET',
+                positionSide=pos_side,
+                order_type='TRAILING_STOP_MARKET',
                 quantity=pos.quantity,
-                stopPrice=round(new_sl, 2),
-                closePosition=True
+                callbackRate=1.0,  # 1% trailing
+                reduceOnly=True
             )
             
             self.trailing_activated[symbol] = True
-            self.trailing_stop_price[symbol] = new_sl
             
             logger.info(
-                f"  🔒 Trailing activo: {symbol} │ "
-                f"Nuevo SL: ${new_sl:,.2f} (breakeven + 0.1%)"
+                f"  🔒 Trailing Nativo activo: {symbol} │ "
+                f"Callback Rate: 1.0%"
             )
             
         except Exception as e:
