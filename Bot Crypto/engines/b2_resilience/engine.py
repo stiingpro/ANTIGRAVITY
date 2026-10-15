@@ -80,8 +80,8 @@ class B2ResilienceEngine:
         'motor_id': 'B2_REL_STRENGTH_V8',
         'version': '8.0',
         
-        # Activos exclusivos B2: Cripto Narrativas (IA/DeFi/L1) + Plata y Petróleo en Binance Futures
-        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT'],
+        # Activos exclusivos B2: Cripto Narrativas (IA/DeFi/L1) + Plata, Petróleo y NVIDIA en Binance Futures
+        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT', 'NVDAUSDT'],
         'symbol': 'ETHUSDT',  # Default para display
         
         # Timeframes
@@ -110,7 +110,7 @@ class B2ResilienceEngine:
         'max_position_size_pct': 3.5,
         'min_leverage': 2,
         'max_leverage': 3,           # 1.5x - 3x validado en regresión 2026 (+44.05%)
-        'max_open_positions': 3,
+        'max_open_positions': 4,
         'max_positions_per_symbol': 1,
         
         # Trailing stop
@@ -469,7 +469,7 @@ class B2ResilienceEngine:
         'RENDERUSDT': 1, 'UNIUSDT': 0, 'TAOUSDT': 2, 'HYPEUSDT': 2,
         'XAUUSDT': 2, 'PAXGUSDT': 3, 'XAGUSDT': 1, 'COPPERUSDT': 1,
         'CLUSDT': 1, 'SPYUSDT': 2, 'QQQUSDT': 2, 'GDXUSDT': 1,
-        'URNMUSDT': 1, 'NVDAUSDT': 1, 'TSLAUSDT': 1,
+        'URNMUSDT': 1, 'NVDAUSDT': 2, 'TSLAUSDT': 1,
     }
 
     @staticmethod

@@ -18,13 +18,13 @@ BACKTEST_METRICS = {
     },
     'B2': {
         'name': 'B2 RelStrength V8', 'tf': '1H/4H', 'style': 'Fuerza Relativa (ROC 15d)',
-        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT'],
+        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT', 'NVDAUSDT'],
         'phase_a': {'roi': 44.05, 'pnl': 440.50, 'wr': 52.0, 'sharpe': 1.65, 'mdd': 16.5, 'pf': 1.34, 'trades': 38},
         'phase_b': {'roi': 44.05, 'pnl': 440.50, 'wr': 52.0, 'sharpe': 1.65, 'mdd': 16.5, 'pf': 1.34, 'trades': 38},
     },
     'B3': {
         'name': 'B3 Wyckoff Vault V8', 'tf': '4H/1D', 'style': 'Anti-Degradación Wyckoff',
-        'symbols': ['BTCUSDT', 'PAXGUSDT', 'XAUUSDT', 'COPPERUSDT', 'SPYUSDT', 'ONDOUSDT'],
+        'symbols': ['BTCUSDT', 'PAXGUSDT', 'XAUUSDT', 'COPPERUSDT', 'SPYUSDT', 'QQQUSDT', 'ONDOUSDT'],
         'phase_a': {'roi': 50.05, 'pnl': 500.50, 'wr': 63.2, 'sharpe': 2.15, 'mdd': 11.8, 'pf': 1.51, 'trades': 19},
         'phase_b': {'roi': 50.05, 'pnl': 500.50, 'wr': 63.2, 'sharpe': 2.15, 'mdd': 11.8, 'pf': 1.51, 'trades': 19},
     }
@@ -633,7 +633,7 @@ class TelegramInterface:
     async def cmd_demo(self, message: types.Message):
         """Ejecuta un escaneo en vivo V8 y devuelve el panel completo del Portafolio Demo Trifecta."""
         try:
-            await message.answer("📡 *Escaneando 17 activos en Binance Futures (B1 + B2 + B3 V8)...*", parse_mode="Markdown")
+            await message.answer("📡 *Escaneando 19 activos en Binance Futures (B1 + B2 + B3 V8)...*", parse_mode="Markdown")
             import demo_trifecta_2026 as demo
             state = demo.load_state()
             await asyncio.to_thread(demo.run_live_scan, state)

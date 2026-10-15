@@ -40,6 +40,7 @@ class SeniorMarketAnalyst:
         # Acciones y ETFs Estratégicos (con su ticker nativo en Binance Futures)
         'SPY':      {'name': 'S&P 500 (Binance: SPYUSDT)', 'category': 'EQUITY'},
         'QQQ':      {'name': 'Nasdaq 100 (Binance: QQQUSDT)', 'category': 'EQUITY'},
+        'NVDA':     {'name': 'NVIDIA Corp (Binance: NVDAUSDT)', 'category': 'EQUITY'},
         'GDX':      {'name': 'Mineras de Oro (Binance: GDXUSDT)', 'category': 'EQUITY'},
         'URA':      {'name': 'Uranio & Nuclear (Binance: URNMUSDT)', 'category': 'EQUITY'},
     }

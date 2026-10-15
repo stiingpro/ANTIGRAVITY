@@ -10,9 +10,9 @@ Motores activos:
   - B1 (B1_RANGE_GRID_V8): Grid Dinámico & Reversión en Rango (ADX < 25)
     Activos: SOLUSDT, BNBUSDT, LINKUSDT
   - B2 (B2_REL_STRENGTH_V8): Rotación por Fuerza Relativa (ROC 15d + ADX > 18)
-    Activos: ETHUSDT, AVAXUSDT, RENDERUSDT, UNIUSDT, TAOUSDT, HYPEUSDT, XAGUSDT, CLUSDT
+    Activos: ETHUSDT, AVAXUSDT, RENDERUSDT, UNIUSDT, TAOUSDT, HYPEUSDT, XAGUSDT, CLUSDT, NVDAUSDT
   - B3 (B3_ANTI_DEBASEMENT_V8): Bóveda Anti-Degradación Wyckoff (RSI < 33 / Z < -1.65)
-    Activos: BTCUSDT, PAXGUSDT, XAUUSDT, COPPERUSDT, SPYUSDT, ONDOUSDT
+    Activos: BTCUSDT, PAXGUSDT, XAUUSDT, COPPERUSDT, SPYUSDT, QQQUSDT, ONDOUSDT
 
 Uso:
   py demo_trifecta_2026.py --once              # Escaneo en vivo único + reporte completo
@@ -54,9 +54,9 @@ TAKER_FEE = 0.0004  # 0.04% comisión estándar Binance Futures USDT-M
 TESTNET_QTY_PRECISION = {
     "SOLUSDT": 0, "BNBUSDT": 2, "LINKUSDT": 1,
     "ETHUSDT": 3, "AVAXUSDT": 1, "RENDERUSDT": 1, "UNIUSDT": 0,
-    "TAOUSDT": 2, "HYPEUSDT": 2, "XAGUSDT": 1, "CLUSDT": 1,
+    "TAOUSDT": 2, "HYPEUSDT": 2, "XAGUSDT": 1, "CLUSDT": 1, "NVDAUSDT": 2,
     "BTCUSDT": 3, "PAXGUSDT": 3, "XAUUSDT": 2, "COPPERUSDT": 1,
-    "SPYUSDT": 2, "ONDOUSDT": 1
+    "SPYUSDT": 2, "QQQUSDT": 2, "ONDOUSDT": 1
 }
 
 
@@ -244,7 +244,12 @@ def load_state() -> Dict:
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                st = json.load(f)
+            if "engines" in st:
+                st["engines"]["B1"]["symbols"] = B1SprintEngine.CONFIG["symbols"]
+                st["engines"]["B2"]["symbols"] = B2ResilienceEngine.CONFIG["symbols"]
+                st["engines"]["B3"]["symbols"] = B3AnchorEngine.CONFIG["symbols"]
+            return st
         except Exception:
             pass
     state = init_default_state()
@@ -413,7 +418,7 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
                     ev = open_demo_position(
                         "B3", b3_state, sym, "LONG", price,
                         sig.stop_loss, sig.take_profit,
-                        leverage=2, margin_pct=25.0, reason=sig.reason, max_open=3
+                        leverage=2, margin_pct=20.0, reason=sig.reason, max_open=4
                     )
                     if ev:
                         events.append(ev)
@@ -534,7 +539,7 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
         ev = open_demo_position(
             "B2", b2_state, sig.symbol, sig.side.name, sig.entry_price,
             sig.stop_loss, sig.take_profit,
-            leverage=sig.leverage, margin_pct=22.0, reason=sig.reason, max_open=3
+            leverage=sig.leverage, margin_pct=20.0, reason=sig.reason, max_open=4
         )
         if ev:
             events.append(ev)
@@ -606,7 +611,7 @@ def print_dashboard(state: Dict, scan_result: Optional[Dict] = None):
         else:
             print("\nℹ️ Sin cierres ni nuevas aperturas en este segundo exacto.")
 
-        print("\n📡 RADAR EN TIEMPO REAL DE LOS 17 ACTIVOS EN BINANCE FUTURES:")
+        print("\n📡 RADAR EN TIEMPO REAL DE LOS 19 ACTIVOS EN BINANCE FUTURES:")
         for key in ("B1", "B2", "B3"):
             print(f"\n  [{key} — {state['engines'][key]['motor_id']}]")
             for d in scan_result["diagnostics"][key]:
@@ -718,7 +723,7 @@ def process_pending_telegram_commands(offset_holder: List[int]):
 
             cmd = text.split()[0].lower().split("@")[0]
             if cmd in ("/demo", "/status", "/positions", "/pnl", "/balance"):
-                _send_tg_message(tok, chat_id, "📡 *Actualizando precios en vivo de los 17 activos en Binance Futures...*")
+                _send_tg_message(tok, chat_id, "📡 *Actualizando precios en vivo de los 19 activos en Binance Futures...*")
                 st = load_state()
                 run_live_scan(st)
                 _send_tg_message(tok, chat_id, _build_demo_telegram_text(st))

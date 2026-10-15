@@ -11,7 +11,7 @@ class B3AnchorEngine:
     """
     Motor B3 (ANTI-DEBASEMENT VAULT) - V8 Champion
     - Timeframes: 1D (Macro Context), 4H (Wyckoff Deep Value Entry & Strength Exit)
-    - Assets: BTCUSDT, PAXGUSDT, XAUUSDT, COPPERUSDT, SPYUSDT, ONDOUSDT
+    - Assets: BTCUSDT, PAXGUSDT, XAUUSDT, COPPERUSDT, SPYUSDT, QQQUSDT, ONDOUSDT
     - Logic: Wyckoff Deep Value Accumulation (RSI < 33 o Z-Score < -1.65 + Bullish Reversal)
              y Venta en Fortaleza (RSI >= 64 o Banda Superior de Bollinger)
     - Regresión 2026 (Ene-Sep): +50.05% ROI, Win Rate 63.2%, Profit Factor 1.51
@@ -21,8 +21,8 @@ class B3AnchorEngine:
     
     CONFIG = {
         'motor_id': 'B3_ANTI_DEBASEMENT_V8',
-        # Activos exclusivos de Reserva de Valor Anti-Degradación Monetaria
-        'symbols': ['BTCUSDT', 'PAXGUSDT', 'XAUUSDT', 'COPPERUSDT', 'SPYUSDT', 'ONDOUSDT'],
+        # Activos exclusivos de Reserva de Valor Anti-Degradación Monetaria + Índices de IA (QQQ)
+        'symbols': ['BTCUSDT', 'PAXGUSDT', 'XAUUSDT', 'COPPERUSDT', 'SPYUSDT', 'QQQUSDT', 'ONDOUSDT'],
         'timeframes': ['4h', '1d'],
         'max_leverage': 2,
         'ema_fast': 50, 'ema_slow': 200,
@@ -228,7 +228,7 @@ class B3AnchorEngine:
         'BNBUSDT': 2, 'MATICUSDT': 0, 'DOGEUSDT': 0, 'ONDOUSDT': 1,
         'XAUUSDT': 2, 'PAXGUSDT': 3, 'XAGUSDT': 1, 'COPPERUSDT': 1,
         'CLUSDT': 1, 'SPYUSDT': 2, 'QQQUSDT': 2, 'GDXUSDT': 1,
-        'URNMUSDT': 1, 'NVDAUSDT': 1, 'TSLAUSDT': 1,
+        'URNMUSDT': 1, 'NVDAUSDT': 2, 'TSLAUSDT': 1,
     }
 
     @staticmethod
