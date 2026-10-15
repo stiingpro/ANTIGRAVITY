@@ -621,7 +621,11 @@ class TelegramInterface:
             from core.senior_analyst import SeniorMarketAnalyst
             analyst = SeniorMarketAnalyst()
             report = await asyncio.to_thread(analyst.generate_executive_report)
-            await message.answer(report, parse_mode="Markdown")
+            try:
+                await message.answer(report, parse_mode="Markdown")
+            except Exception:
+                clean_report = report.replace("*", "").replace("_", "").replace("`", "")
+                await message.answer(clean_report)
         except Exception as e:
             await message.answer(f"❌ Error en Analista Senior: {e}")
             logger.error(f"Error in cmd_analista: {e}")
@@ -633,24 +637,11 @@ class TelegramInterface:
             import demo_trifecta_2026 as demo
             state = demo.load_state()
             await asyncio.to_thread(demo.run_live_scan, state)
-            lines = [
-                "🏦 *PORTAFOLIO DEMO TRIFECTA V8*",
-                f"🕒 `{state['last_updated']}` | Régimen: *{state.get('global_regime', 'NORMAL')}*\n"
-            ]
-            tot_init, tot_eq = 0.0, 0.0
-            for k in ("B1", "B2", "B3"):
-                eng = state["engines"][k]
-                unr = sum(p.get("unrealized_pnl", 0.0) for p in eng["open_positions"].values())
-                eq = eng["cash_balance"] + unr
-                roi = ((eq - eng["initial_capital"]) / eng["initial_capital"]) * 100.0
-                tot_init += eng["initial_capital"]
-                tot_eq += eq
-                lines.append(f"🔹 *{k}* (`{eng['motor_id']}`): `${eq:,.2f}` (`{roi:+.2f}%`) | Abiertas: `{len(eng['open_positions'])}/3`")
-                for sym, p in eng["open_positions"].items():
-                    lines.append(f"   • `{p['side']}` *{sym}*: `${p['entry_price']:,.4f}` → `${p['current_price']:,.4f}` (`${p['unrealized_pnl']:+,.2f}`)")
-            tot_roi = ((tot_eq - tot_init) / tot_init) * 100.0 if tot_init > 0 else 0.0
-            lines.append(f"\n💰 *TOTAL EQUITY*: `${tot_eq:,.2f}` / `${tot_init:,.2f}` (`{tot_roi:+.2f}%`)")
-            await message.answer("\n".join(lines), parse_mode="Markdown")
+            text = demo._build_demo_telegram_text(state)
+            try:
+                await message.answer(text, parse_mode="Markdown")
+            except Exception:
+                await message.answer(text.replace("*", "").replace("_", "").replace("`", ""))
         except Exception as e:
             await message.answer(f"❌ Error en /demo: {e}")
 
