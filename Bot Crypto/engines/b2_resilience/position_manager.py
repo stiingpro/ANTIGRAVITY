@@ -66,17 +66,18 @@ class B2PositionManager:
         pos = self.positions[symbol]
         
         try:
-            # Cancelar órdenes abiertas
-            await connector.cancel_all_orders(symbol)
+            pos_side = 'LONG' if pos.side == TradeSide.LONG else 'SHORT'
+            # Cancelar órdenes abiertas de este lado
+            await connector.cancel_all_orders(symbol, position_side=pos_side)
             
-            # Orden de cierre
+            # Orden de cierre en Hedge Mode (positionSide explícito, sin reduceOnly)
             close_side = 'SELL' if pos.side == TradeSide.LONG else 'BUY'
             await connector.create_order(
                 symbol=symbol,
                 side=close_side,
+                positionSide=pos_side,
                 order_type='MARKET',
-                quantity=pos.quantity,
-                reduceOnly=True
+                quantity=pos.quantity
             )
             
             pnl = pos.unrealized_pnl
@@ -99,15 +100,20 @@ class B2PositionManager:
             return None
     
     async def activate_trailing_stop(self, connector, symbol: str, pos: Position):
-        """Activar trailing stop para una posición en profit."""
+        """Activar trailing stop para una posición en profit preservando el Take Profit."""
         if self.trailing_activated.get(symbol, False):
             return
         
         try:
-            await connector.cancel_all_orders(symbol)
-            
             sl_side = 'SELL' if pos.side == TradeSide.LONG else 'BUY'
             pos_side = 'LONG' if pos.side == TradeSide.LONG else 'SHORT'
+            
+            # Cancelar ÚNICAMENTE el Stop Loss previo (preservando el Take Profit)
+            await connector.cancel_all_orders(
+                symbol,
+                position_side=pos_side,
+                order_types=['STOP_MARKET', 'STOP']
+            )
             
             await connector.create_order(
                 symbol=symbol,
@@ -115,15 +121,14 @@ class B2PositionManager:
                 positionSide=pos_side,
                 order_type='TRAILING_STOP_MARKET',
                 quantity=pos.quantity,
-                callbackRate=1.0,  # 1% trailing
-                reduceOnly=True
+                callbackRate=1.0  # 1% trailing
             )
             
             self.trailing_activated[symbol] = True
             
             logger.info(
                 f"  🔒 Trailing Nativo activo: {symbol} │ "
-                f"Callback Rate: 1.0%"
+                f"Callback Rate: 1.0% (TP intacto)"
             )
             
         except Exception as e:

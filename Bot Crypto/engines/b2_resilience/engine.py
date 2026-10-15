@@ -77,59 +77,59 @@ class B2ResilienceEngine:
     """
     
     CONFIG = {
-        'motor_id': 'B2_RESILIENCE_V6',
-        'version': '6.0',
+        'motor_id': 'B2_REL_STRENGTH_V8',
+        'version': '8.0',
         
-        # Activos (top 4 por rendimiento en backtest)
-        'symbols': ['SOLUSDT', 'AVAXUSDT', 'DOTUSDT', 'ETHUSDT'],
-        'symbol': 'SOLUSDT',  # Default para display
+        # Activos exclusivos B2: Cripto Narrativas (IA/DeFi/L1) + Plata y Petróleo en Binance Futures
+        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT'],
+        'symbol': 'ETHUSDT',  # Default para display
         
         # Timeframes
         'timeframe_exec': '1h',      # Ejecución de señales
-        'timeframe_macro': '4h',     # Dirección macro
+        'timeframe_macro': '4h',     # Dirección macro y Fuerza Relativa
         
         # EMA
-        'ema_fast': 20,              # EMA rápida (1H)
-        'ema_slow': 50,              # EMA lenta (1H)
+        'ema_fast': 20,              # EMA rápida (1H/4H)
+        'ema_slow': 50,              # EMA lenta (1H/4H)
         'ema_macro': 200,            # EMA dirección (4H)
         
         # RSI
         'rsi_period': 14,
-        'rsi_long_min': 40,
-        'rsi_long_max': 70,
-        'rsi_short_min': 30,
-        'rsi_short_max': 60,
+        'rsi_long_min': 45,
+        'rsi_long_max': 72,
+        'rsi_short_min': 28,
+        'rsi_short_max': 55,
         'rsi_div_lookback': 5,
         
         # ATR / SL / TP
         'atr_period': 14,
-        'sl_atr_mult': 2.0,          # SL = 2x ATR(4H)
-        'tp_atr_mult': 4.0,          # TP = 4x ATR(4H) → R:R 1:2
+        'sl_atr_mult': 2.5,          # SL = 2.5x ATR(4H) para dejar respirar la tendencia
+        'tp_atr_mult': 4.5,          # TP = 4.5x ATR(4H)
         
         # Position sizing
-        'max_position_size_pct': 3.0,
-        'min_leverage': 3,
-        'max_leverage': 5,
-        'max_open_positions': 4,       # 1 por símbolo
+        'max_position_size_pct': 3.5,
+        'min_leverage': 2,
+        'max_leverage': 3,           # 1.5x - 3x validado en regresión 2026 (+44.05%)
+        'max_open_positions': 3,
         'max_positions_per_symbol': 1,
         
         # Trailing stop
-        'trailing_stop_activation_pct': 1.5,  # Activar al +1.5%
+        'trailing_stop_activation_pct': 1.8,
         
         # Risk management
         'max_daily_drawdown_pct': 5.0,
-        'max_total_drawdown_pct': 10.0,
-        'max_daily_trades': 8,
+        'max_total_drawdown_pct': 12.0,
+        'max_daily_trades': 6,
         'max_consecutive_losses': 3,       # Pausa tras 3 pérdidas
         'loss_pause_candles': 24,          # 24 horas de pausa
         'cooldown_candles': 6,             # 6 horas entre trades/símbolo
         
         # Signal
-        'min_strength': 0.55,
+        'min_strength': 0.60,
         'vol_threshold': 0.8,
         
         # Check interval
-        'check_interval_seconds': 300,  # 5 min (1H candle = check 12 veces)
+        'check_interval_seconds': 300,
     }
     
     def __init__(self, connector, environment: str = 'testnet'):
@@ -227,14 +227,14 @@ class B2ResilienceEngine:
     async def process_external_signal(self, signal_data: Dict):
         """
         Procesar señal externa (TradingView Webhook).
-        Delega a _execute_trade() que usa self.connector.client.futures_create_order().
+        Delega a _execute_trade() que usa self.connector.create_order().
         No requiere self.state == RUNNING — webhooks siempre se procesan.
         """
         symbol = signal_data.get('symbol')
         side_str = signal_data.get('side') 
         
-        if symbol not in self.CONFIG['symbols']:
-            raise ValueError(f"B2 no opera {symbol}. Válidos: {self.CONFIG['symbols']}")
+        if not symbol or not side_str:
+            raise ValueError("Webhook B2 requiere 'symbol' y 'side'")
 
         logger.info(f"📨 B2 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
         
@@ -250,20 +250,24 @@ class B2ResilienceEngine:
         side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
         price = float(signal_data.get('price') or 0)
         if price == 0:
-            ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
+            ticker = await self.connector.get_ticker(symbol)
             price = float(ticker['price'])
 
-        # B2 Defaults: SL 2% / TP 4% (Resilience logic)
+        custom_sl = float(signal_data.get('sl') or 0)
+        custom_tp = float(signal_data.get('tp') or 0)
+        stop_loss = custom_sl if custom_sl > 0 else price * (0.98 if side == TradeSide.LONG else 1.02)
+        take_profit = custom_tp if custom_tp > 0 else price * (1.04 if side == TradeSide.LONG else 0.96)
+
         signal = TradeSignal(
             symbol=symbol,
             side=side,
             strength=0.9, 
             entry_price=price,
-            stop_loss=price * (0.98 if side == TradeSide.LONG else 1.02),
-            take_profit=price * (1.04 if side == TradeSide.LONG else 0.96),
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             timestamp=datetime.now(),
-            reason="TvWebhook",
-            leverage=3
+            reason=signal_data.get('comment', 'TvWebhook'),
+            leverage=int(signal_data.get('leverage') or 3)
         )
         
         # Usar _execute_trade que ya funciona correctamente
@@ -457,17 +461,21 @@ class B2ResilienceEngine:
         
         return True
     
-    # Precision map: cantidad de decimales permitidos por Binance Futures
+    # Precision map: cantidad de decimales permitidos por Binance Futures (Crypto + TradFi)
     QTY_PRECISION = {
         'BTCUSDT': 3, 'ETHUSDT': 3, 'SOLUSDT': 0, 'AVAXUSDT': 1,
         'DOTUSDT': 1, 'LINKUSDT': 1, 'ADAUSDT': 0, 'XRPUSDT': 1,
         'BNBUSDT': 2, 'MATICUSDT': 0, 'DOGEUSDT': 0,
+        'RENDERUSDT': 1, 'UNIUSDT': 0, 'TAOUSDT': 2, 'HYPEUSDT': 2,
+        'XAUUSDT': 2, 'PAXGUSDT': 3, 'XAGUSDT': 1, 'COPPERUSDT': 1,
+        'CLUSDT': 1, 'SPYUSDT': 2, 'QQQUSDT': 2, 'GDXUSDT': 1,
+        'URNMUSDT': 1, 'NVDAUSDT': 1, 'TSLAUSDT': 1,
     }
 
     @staticmethod
     def _round_qty(symbol: str, qty: float) -> float:
         """Redondear qty a la precisión válida para Binance."""
-        precision = B2ResilienceEngine.QTY_PRECISION.get(symbol, 3)
+        precision = B2ResilienceEngine.QTY_PRECISION.get(symbol, 2)
         import math
         factor = 10 ** precision
         return math.floor(qty * factor) / factor
@@ -552,7 +560,7 @@ class B2ResilienceEngine:
             raise
     
     async def _set_sl_tp(self, signal: TradeSignal, quantity: float):
-        """Colocar órdenes SL y TP."""
+        """Colocar órdenes SL y TP con quantity explícito (sin closePosition=True)."""
         try:
             sl_side = 'SELL' if signal.side == TradeSide.LONG else 'BUY'
             pos_side = 'LONG' if signal.side == TradeSide.LONG else 'SHORT'
@@ -564,7 +572,7 @@ class B2ResilienceEngine:
                 order_type='STOP_MARKET',
                 quantity=quantity,
                 stopPrice=signal.stop_loss,
-                closePosition=True
+                closePosition=False
             )
             
             await self.connector.create_order(
@@ -574,7 +582,7 @@ class B2ResilienceEngine:
                 order_type='TAKE_PROFIT_MARKET',
                 quantity=quantity,
                 stopPrice=signal.take_profit,
-                closePosition=True
+                closePosition=False
             )
         except Exception as e:
             logger.warning(f"⚠️ Error SL/TP {signal.symbol}: {e}")

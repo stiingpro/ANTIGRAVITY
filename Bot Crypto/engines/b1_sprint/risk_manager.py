@@ -29,17 +29,23 @@ class B1RiskManager:
         self.current_balance = initial_balance
         
         # V5.1 Parameters
-        self.max_dd_pct = 15.0
+        self.max_dd_pct = config.get('max_daily_loss_pct', 15.0)
+        self.max_daily_loss_pct = config.get('max_daily_loss_pct', 15.0)
         self.max_consec_losses = 4
         self.loss_pause_hours = 4  # Reduced from 24h to 4h for Sprint nature
         self.atr_spike_pause_hours = 4
-        self.max_pos_size_pct = 5.0
+        self.max_pos_size_pct = config.get('max_position_pct', 5.0)
+        self.max_position_pct = self.max_pos_size_pct
+        self.max_leverage = config.get('max_leverage', 10)
         
         # State
         self.hibernating = False
         self.paused_until: Optional[datetime] = None
         self.consecutive_losses = 0
         self.daily_pnl = 0.0
+        self.daily_trades = 0
+        self.daily_losses = 0
+        self.last_reset = datetime.now().date()
         
         logger.info(f"🛡️ Risk Manager V5.1 inicializado (Kill-Switch: -{self.max_dd_pct}%)")
         
@@ -58,6 +64,7 @@ class B1RiskManager:
     
     def can_trade(self, signal, atr_15m_spike: bool = False) -> Tuple[bool, str]:
         """Check if trading is allowed."""
+        self._check_daily_reset()
         if self.hibernating:
             return False, "HIBERNATING"
             
@@ -72,7 +79,7 @@ class B1RiskManager:
         
     def on_trade_closed(self, pnl: float):
         """Update state after trade close."""
-        self.daily_pnl += pnl
+        self.record_trade_result(pnl)
         
         if pnl < 0:
             self.consecutive_losses += 1
@@ -86,22 +93,38 @@ class B1RiskManager:
         self.paused_until = datetime.now() + timedelta(hours=hours)
         logger.warning(f"⏸️ Motor PAUSADO por {hours}h ({reason})")
 
-    def calculate_quantity(self, entry_price: float, leverage: int = 10) -> float:
-        """Calculate trade quantity (5% of equity)."""
+    def calculate_quantity(self, entry_price: float, leverage: int = 10, symbol: str = 'SOLUSDT') -> float:
+        """Calculate trade quantity dynamically according to symbol precision and notional rules."""
+        if entry_price <= 0:
+            return 0.0
         calc_equity = self.current_balance
         margin = calc_equity * (self.max_pos_size_pct / 100)
         notional = margin * leverage
+        
+        # Ensure minimum Binance notional ($100 for BTC/ETH, $20 for altcoins/TradFi)
+        min_notional = 100.0 if symbol in ('BTCUSDT', 'ETHUSDT') else 20.0
+        if notional < min_notional:
+            notional = min_notional
+            
         quantity = notional / entry_price
         
-        # Redondear a 3 decimales (BTC precision)
-        quantity = round(quantity, 3)
+        qty_precision_map = {
+            'BTCUSDT': 3,
+            'ETHUSDT': 3,
+            'PAXGUSDT': 3,
+            'XAUUSDT': 2,
+            'SOLUSDT': 1,
+            'AVAXUSDT': 1,
+            'DOTUSDT': 1,
+            'LINKUSDT': 1,
+        }
+        prec = qty_precision_map.get(symbol, 2)
+        quantity = round(quantity, prec)
+        min_step = 10 ** (-prec)
+        if quantity < min_step:
+            quantity = min_step
         
-        # Mínimo de Binance para BTC (~$100 notional)
-        min_quantity = 0.002
-        if quantity < min_quantity:
-            quantity = min_quantity
-        
-        logger.info(f"📐 Position size: {quantity} ({notional:.2f} USDT)")
+        logger.info(f"📐 Position size [{symbol}]: {quantity} ({notional:.2f} USDT)")
         
         return quantity
     

@@ -89,11 +89,11 @@ class ExchangeConnector:
     
     def __init__(
         self,
-        motor: Literal['B1', 'B2', 'B3', 'TRIFECTA'],
+        motor: str = 'TRIFECTA',
         environment: Literal['testnet', 'production'] = 'testnet',
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
-        testnet: bool = False # Compatibilidad con main.py anterior
+        testnet: Optional[bool] = None # Compatibilidad con main.py
     ):
         """
         Inicializa el conector.
@@ -103,16 +103,16 @@ class ExchangeConnector:
             environment: Entorno a usar (testnet o production)
             api_key: (Opcional) Inyección manual de key
             api_secret: (Opcional) Inyección manual de secret
+            testnet: (Opcional) Si se especifica True/False, define environment
         """
         self.motor = motor
         
-        # Compatibilidad: si pasan testnet=True, forzar environment='testnet'
-        if testnet and environment == 'production': 
-             environment = 'testnet'
+        if testnet is not None:
+            environment = 'testnet' if testnet else 'production'
              
         self.environment = environment
-        self.config = ExchangeConfig.ENVIRONMENTS[environment]
-        self.motor_config = ExchangeConfig.MOTORS[motor]
+        self.config = ExchangeConfig.ENVIRONMENTS.get(environment, ExchangeConfig.ENVIRONMENTS['testnet'])
+        self.motor_config = ExchangeConfig.MOTORS.get(motor, ExchangeConfig.MOTORS['TRIFECTA'])
         
         # Credenciales manuales o cargar de env
         self.api_key = api_key
@@ -415,9 +415,13 @@ class ExchangeConnector:
             for p in positions:
                 try:
                     if float(p.get('positionAmt', 0)) != 0:
+                        pos_side = p.get('positionSide')
+                        if not pos_side or pos_side == 'BOTH':
+                            pos_side = 'LONG' if float(p.get('positionAmt', 0)) > 0 else 'SHORT'
                         open_positions.append({
                             'symbol': p.get('symbol'),
                             'side': 'LONG' if float(p.get('positionAmt', 0)) > 0 else 'SHORT',
+                            'positionSide': pos_side,
                             'quantity': abs(float(p.get('positionAmt', 0))),
                             'entry_price': float(p.get('entryPrice', 0)),
                             'pnl': float(p.get('unRealizedProfit', 0)),
@@ -442,17 +446,109 @@ class ExchangeConnector:
         except Exception as e:
             logger.error(f"❌ Error obteniendo posiciones: {str(e)}")
             raise
+
+    async def get_klines(self, symbol: str, interval: str, limit: int = 100) -> list:
+        """
+        Obtiene velas históricas de Binance Futures de forma asíncrona (no bloqueante).
+        """
+        if not self.connected:
+            raise RuntimeError("No conectado. Llamar connect() primero.")
+        import asyncio
+        return await self.execute_with_retry(
+            asyncio.to_thread,
+            self.client.futures_klines,
+            symbol=symbol,
+            interval=interval,
+            limit=limit
+        )
+
+    async def get_ticker(self, symbol: str) -> Dict:
+        """
+        Obtiene el último precio de un símbolo en Binance Futures de forma asíncrona.
+        Normaliza tanto 'price' como 'lastPrice' para compatibilidad con B1/B2/B3.
+        """
+        if not self.connected:
+            raise RuntimeError("No conectado. Llamar connect() primero.")
+        import asyncio
+        ticker = await self.execute_with_retry(
+            asyncio.to_thread,
+            self.client.futures_symbol_ticker,
+            symbol=symbol
+        )
+        if isinstance(ticker, dict):
+            price_val = ticker.get('price') or ticker.get('lastPrice') or '0'
+            ticker['price'] = price_val
+            ticker['lastPrice'] = price_val
+        return ticker
+
+    async def cancel_order(self, symbol: str, order_id: int) -> bool:
+        """Cancela una orden específica por orderId."""
+        if not self.connected or not order_id:
+            return False
+        import asyncio
+        try:
+            await self.execute_with_retry(
+                asyncio.to_thread,
+                self.client.futures_cancel_order,
+                symbol=symbol,
+                orderId=order_id
+            )
+            logger.info(f"🗑️ Orden {order_id} cancelada para {symbol}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo cancelar orden {order_id} ({symbol}): {e}")
+            return False
+
+    async def cancel_all_orders(
+        self,
+        symbol: str,
+        position_side: Optional[str] = None,
+        order_types: Optional[list] = None
+    ) -> bool:
+        """
+        Cancela órdenes abiertas de un símbolo.
+        Si se especifica position_side ('LONG'/'SHORT') o order_types, solo cancela
+        las órdenes que coincidan para no destruir órdenes de otros motores o el TP al mover SL.
+        """
+        if not self.connected:
+            raise RuntimeError("No conectado. Llamar connect() primero.")
+        import asyncio
+        try:
+            if position_side is None and order_types is None:
+                await self.execute_with_retry(
+                    asyncio.to_thread,
+                    self.client.futures_cancel_all_open_orders,
+                    symbol=symbol
+                )
+                logger.info(f"🗑️ Todas las órdenes abiertas canceladas para {symbol}")
+                return True
+
+            open_orders = await self.execute_with_retry(
+                asyncio.to_thread,
+                self.client.futures_get_open_orders,
+                symbol=symbol
+            )
+            for o in open_orders:
+                match_side = (position_side is None) or (o.get('positionSide') == position_side)
+                match_type = (order_types is None) or (o.get('type') in order_types)
+                if match_side and match_type:
+                    await self.cancel_order(symbol, o.get('orderId'))
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Error cancelando órdenes en {symbol}: {e}")
+            return False
     
     async def create_order(self, symbol: str, side: str, order_type: str, 
                            quantity: float = None, stopPrice: float = None,
                            closePosition: bool = False, positionSide: str = None,
                            **kwargs) -> Dict:
         """
-        Crear orden en Binance Futures.
-        Usado por B2/B3 process_external_signal.
+        Crear orden en Binance Futures de forma asíncrona (no bloqueante) y compatible con Hedge Mode.
+        Previene errores -1106 de Binance al limpiar parámetros mutuamente excluyentes.
         """
         if not self.connected:
             raise RuntimeError("No conectado. Llamar connect() primero.")
+        import asyncio
         
         try:
             # Obtener y formatear precisiones si es posible antes de enviar
@@ -481,8 +577,21 @@ class ExchangeConnector:
                 else:
                     params['positionSide'] = positionSide
             params.update(kwargs)
+
+            # Regla Binance Futures #1: closePosition='true' es mutuamente excluyente con quantity y reduceOnly
+            if str(params.get('closePosition', '')).lower() == 'true':
+                params.pop('quantity', None)
+                params.pop('reduceOnly', None)
+
+            # Regla Binance Futures #2: En Hedge Mode (positionSide LONG/SHORT), reduceOnly es rechazado (-1106)
+            if params.get('positionSide') in ('LONG', 'SHORT'):
+                params.pop('reduceOnly', None)
             
-            order = self.client.futures_create_order(**params)
+            order = await self.execute_with_retry(
+                asyncio.to_thread,
+                self.client.futures_create_order,
+                **params
+            )
             logger.info(f"✅ Orden creada: {side} {symbol} {order_type} | OID: {order.get('orderId')}")
             return order
         except Exception as e:

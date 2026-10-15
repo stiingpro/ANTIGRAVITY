@@ -50,6 +50,8 @@ class Position:
     take_profit: float
     unrealized_pnl: float = 0.0
     opened_at: datetime = None
+    sl_order_id: Optional[int] = None
+    tp_order_id: Optional[int] = None
 
 
 class B1SprintEngine:
@@ -58,33 +60,29 @@ class B1SprintEngine:
     
     Características:
     - Perfil agresivo (20x leverage máximo)
-    - Timeframe: 1 hora
-    - Símbolos: BTC, ETH, SOL, BNB, XRP, DOGE, AVAX
-    - Estrategia: Trend Momentum Breakout (TMB)
+    - Timeframe: 5m / 15m / 1h (Macro Bias)
+    - Símbolos por defecto: SOLUSDT (exclusivo para evitar colisión con B2/B3)
     - Kill switch: 15% drawdown
     """
     
-    # Símbolos de trading
     SYMBOLS = [
         'BTCUSDT', 'ETHUSDT', 'SOLUSDT',
         'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT'
     ]
-    
-    # Configuración del motor
-    # Configuración del motor
 
-    # Configuración del motor V5.1
     CONFIG = {
-        'motor_id': 'B1_SPRINT_V5.1',
-        'symbols': ['SOLUSDT'],  # SOL Only for V5.1
+        'motor_id': 'B1_RANGE_GRID_V8',
+        'symbols': ['SOLUSDT', 'BNBUSDT', 'LINKUSDT'],  # Pares exclusivos de oscilación en rango
         'timeframes': ['5m', '15m'],
-        'max_leverage': 20,
+        'max_leverage': 3,             # 2.5x - 3x validado en regresión 2026 (+42.85%)
         'max_position_size_pct': 5.0,
-        'max_open_positions': 1,       # Single asset focus
-        'max_daily_drawdown_pct': 10.0,
+        'max_open_positions': 3,
+        'max_daily_drawdown_pct': 8.0,
         'max_total_drawdown_pct': 15.0, # Kill Switch
-        'ema_fast': 9, 'ema_slow': 21,
+        'ema_fast': 9, 'ema_slow': 21, 'ema_macro': 200,
         'bb_period': 20, 'bb_std': 2.0,
+        'adx_max_range': 25.0,
+        'z_score_threshold': 1.45,
         'vwap_lookback': 20,
     }
     
@@ -101,10 +99,14 @@ class B1SprintEngine:
         self.risk_manager = None
         self.position_manager = None
         
-        # Estado
+        # Estado e indicadores de rendimiento inicializados
         self.positions: Dict[str, Position] = {}
         self.initial_balance: float = 0.0
         self.current_balance: float = 0.0
+        self.total_pnl: float = 0.0
+        self.trades_today: int = 0
+        self.wins_today: int = 0
+        self.losses_today: int = 0
         
         logger.info(f"🚀 B1_SPRINT V5.1 inicializado en modo {environment}")
     
@@ -142,29 +144,51 @@ class B1SprintEngine:
         await self._main_loop()
 
     async def on_candle_closed(self, event: Dict):
-        """Callback para DataFeed (Passive Mode)."""
-        if self.state != EngineState.RUNNING: return
+        """Callback para DataFeed (Passive Mode) reparado con triple timeframe y chequeo de tupla."""
+        if self.state != EngineState.RUNNING:
+            return
         
         symbol = event.get('s')
-        if symbol not in self.CONFIG['symbols']: return
+        if symbol not in self.CONFIG['symbols']:
+            return
         
         try:
-            # Obtener datos recientes para indicadores
-            data = await self.connector.get_klines(symbol, '5m', limit=100)
-            
-            # Analizar
-            signal = self.strategy.analyze(data)
-            
-            # Risk check & Execute
+            # 1. Sincronizar estado de posiciones cerradas
+            await self._update_positions()
+
+            # Evitar abrir duplicados si ya hay posición activa en este símbolo
+            if self.position_manager and symbol in self.position_manager.active_positions:
+                return
+
+            # 2. Obtener datos multi-timeframe (5m, 15m, 1h) usando métodos async del conector
+            d5 = await self._get_market_data(symbol, '5m')
+            d15 = await self._get_market_data(symbol, '15m')
+            d1h = await self._get_market_data(symbol, '1h')
+            if not d5 or not d15:
+                return
+
+            # 3. Filtro de volatilidad y desempaquetado correcto de la tupla (bool, str)
+            atr_spike = self._check_atr_spike(d15)
+            allowed, reason = self.risk_manager.can_trade(None, atr_15m_spike=atr_spike)
+            if not allowed:
+                if reason == "HIBERNATING":
+                    self.state = EngineState.HIBERNATING
+                logger.debug(f"⏸️ B1 bloqueado por RiskManager: {reason}")
+                return
+
+            # 4. Analizar con los 3 timeframes requeridos
+            signal = self.strategy.analyze(d5, d15, d1h)
             if signal:
-                if self.risk_manager.can_trade(signal):
-                    await self._execute_trade(signal)
-            
-            # Update positions (Pnl, Trailing)
-            # await self._manage_positions() # Simple check
+                from engines.b3_anchor.engine import B3AnchorEngine
+                eff_lev = self.CONFIG['max_leverage']
+                if getattr(B3AnchorEngine, 'GLOBAL_REGIME', 'NORMAL') == 'BEAR':
+                    eff_lev = max(1, eff_lev // 2)
+                qty = self.risk_manager.calculate_quantity(signal.entry_price, eff_lev, symbol=symbol)
+                await self._execute_trade(signal, qty)
+                self.trades_today += 1
             
         except Exception as e:
-            logger.error(f"B1 Passive Error: {e}")
+            logger.error(f"B1 Passive Error ({symbol}): {e}")
     
     async def stop(self):
         self.state = EngineState.STOPPED
@@ -175,49 +199,44 @@ class B1SprintEngine:
         
         while self.state == EngineState.RUNNING:
             try:
-                # Actualizar balance
-                bal = self.connector.get_balance()
-                self.current_balance = bal.get('available', 0)
+                bal = await asyncio.to_thread(self.connector.get_balance)
+                self.current_balance = float(bal.get('available', 0)) if bal else self.current_balance
                 self.risk_manager.update_balance(self.current_balance)
                 
-                # Check Kill Switch internally in Risk Manager
                 can_trade_global, reason = self.risk_manager.can_trade(None)
                 if not can_trade_global and reason == "HIBERNATING":
                     logger.critical("🚨 MOTOR HIBERNADO (Kill-Switch). Deteniendo loop.")
                     self.state = EngineState.HIBERNATING
                     break
                 
-                # Iterar Símbolos
                 for symbol in self.CONFIG['symbols']:
-                    # Data 5m
+                    if self.position_manager and symbol in self.position_manager.active_positions:
+                        continue
+
                     d5 = await self._get_market_data(symbol, '5m')
-                    # Data 15m
                     d15 = await self._get_market_data(symbol, '15m')
-                    # Data 1H (V6: Macro Bias)
                     d1h = await self._get_market_data(symbol, '1h')
                     
                     if not d5 or not d15:
                         continue
                         
-                    # Check ATR Spike (Volatility Filter)
                     atr_spike = self._check_atr_spike(d15)
                     can_trade, reason = self.risk_manager.can_trade(None, atr_15m_spike=atr_spike)
                     
                     if not can_trade:
-                        if reason != "OK": logger.debug(f"Trading pausado: {reason}")
+                        if reason != "OK":
+                            logger.debug(f"Trading pausado: {reason}")
                         continue
                     
-                    # Analyze
                     signal = self.strategy.analyze(d5, d15, d1h)
                     
                     if signal:
-                        # Calculate Quantity via Risk Manager
-                        qty = self.risk_manager.calculate_quantity(signal.entry_price, self.CONFIG['max_leverage'])
-                        
-                        # Execute
+                        qty = self.risk_manager.calculate_quantity(
+                            signal.entry_price, self.CONFIG['max_leverage'], symbol=symbol
+                        )
                         await self._execute_trade(signal, qty)
+                        self.trades_today += 1
                 
-                # Wait 10s
                 await asyncio.sleep(10)
                 
             except Exception as e:
@@ -227,59 +246,57 @@ class B1SprintEngine:
     async def process_external_signal(self, signal_data: Dict):
         """
         Procesar señal externa (TradingView Webhook).
+        Soporta niveles SL/TP dinámicos enviados por Antigravity_Senior_Analyst_Master.pine.
         """
-        if self.state != EngineState.RUNNING:
-            logger.warning("⚠️ B1 recibio señal externa pero no esta corriendo.")
+        if self.state == EngineState.HIBERNATING:
+            logger.warning("⛔ B1 en HIBERNACIÓN; ignorando señal externa.")
             return
 
         symbol = signal_data.get('symbol')
         side_str = signal_data.get('side') # BUY/SELL
-        
-        if symbol not in self.CONFIG['symbols']:
-            logger.warning(f"⚠️ B1 ignora señal para {symbol}")
-            return
 
         logger.info(f"📨 B1 EXECUTING EXTERNAL SIGNAL: {side_str} {symbol}")
         
         try:
-            bal = self.connector.get_balance()
-            if bal:
+            bal = await asyncio.to_thread(self.connector.get_balance)
+            if bal and self.risk_manager:
                 self.risk_manager.update_balance(float(bal.get('available', 0)))
 
             side = TradeSide.LONG if side_str == 'BUY' else TradeSide.SHORT
-            price = float(signal_data.get('price', 0))
+            price = float(signal_data.get('price') or 0)
             if price == 0:
-                 from core.data_feed import DataFeed
-                 price = DataFeed.LATEST_PRICES.get(symbol, 0)
-                 if price == 0: # Fallback a REST
-                     ticker = self.connector.client.futures_symbol_ticker(symbol=symbol)
-                     price = float(ticker['price'])
+                from core.data_feed import DataFeed
+                price = DataFeed.LATEST_PRICES.get(symbol, 0)
+                if price == 0:
+                    ticker = await self.connector.get_ticker(symbol)
+                    price = float(ticker['price'])
 
-            # Intercomunicador B3: Reduce apalancamiento si el mercado Macro es bajista oscuro
             from engines.b3_anchor.engine import B3AnchorEngine
             eff_lev = self.CONFIG['max_leverage']
             if getattr(B3AnchorEngine, 'GLOBAL_REGIME', 'NORMAL') == 'BEAR':
                 eff_lev = max(1, eff_lev // 2)
                 logger.info(f"🛡️ Intercom B3 Activo: B1 ajustado a {eff_lev}x (Régimen: BEAR) para {symbol}")
 
-            # Construct synthetic signal
-            # SL/TP defaults: SL 1%, TP 2% (Sprint logic)
+            # Usar SL/TP del indicador maestro si vienen en el webhook, sino 1% / 2%
+            custom_sl = float(signal_data.get('sl') or 0)
+            custom_tp = float(signal_data.get('tp') or 0)
+            sl_price = custom_sl if custom_sl > 0 else price * (0.99 if side == TradeSide.LONG else 1.01)
+            tp_price = custom_tp if custom_tp > 0 else price * (1.02 if side == TradeSide.LONG else 0.98)
+
             signal = TradeSignal(
                 symbol=symbol,
                 side=side,
                 strength=1.0, 
                 entry_price=price,
-                stop_loss=price * (0.99 if side == TradeSide.LONG else 1.01),
-                take_profit=price * (1.02 if side == TradeSide.LONG else 0.98),
+                stop_loss=sl_price,
+                take_profit=tp_price,
                 timestamp=datetime.now(),
-                reason=f"TvWebhook"
+                reason=signal_data.get('reason', 'TvWebhook')
             )
             
-            # Calculate Qty with adjusted leverage
-            qty = self.risk_manager.calculate_quantity(price, eff_lev)
-            
-            # Execute
+            qty = self.risk_manager.calculate_quantity(price, eff_lev, symbol=symbol)
             await self._execute_trade(signal, qty)
+            self.trades_today += 1
             logger.info("✅ B1 External Signal Executed")
 
         except Exception as e:
@@ -288,7 +305,7 @@ class B1SprintEngine:
 
     async def _get_market_data(self, symbol, interval) -> Dict:
         try:
-            klines = self.connector.client.futures_klines(symbol=symbol, interval=interval, limit=100)
+            klines = await self.connector.get_klines(symbol=symbol, interval=interval, limit=100)
             return {
                 'symbol': symbol,
                 'klines': klines,

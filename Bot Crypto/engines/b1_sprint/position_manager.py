@@ -62,7 +62,7 @@ class B1PositionManager:
             order_id = order['orderId']
             logger.info(f"✅ Orden ejecutada: {order_id}")
             
-            # 2. Configurar Stop Loss
+            # 2. Configurar Stop Loss (con quantity explícito para no afectar otros motores)
             sl_side = 'SELL' if side == TradeSide.LONG else 'BUY'
             sl_order = await self.connector.create_order(
                 symbol=symbol,
@@ -70,9 +70,11 @@ class B1PositionManager:
                 positionSide=pos_side,
                 order_type='STOP_MARKET',
                 stopPrice=stop_loss,
-                closePosition=True
+                quantity=quantity,
+                closePosition=False
             )
-            logger.info(f"🛑 Stop Loss @ ${stop_loss:.2f}")
+            sl_order_id = sl_order.get('orderId')
+            logger.info(f"🛑 Stop Loss @ ${stop_loss:.2f} (id={sl_order_id})")
             
             # 3. Configurar Take Profit
             tp_order = await self.connector.create_order(
@@ -81,19 +83,23 @@ class B1PositionManager:
                 positionSide=pos_side,
                 order_type='TAKE_PROFIT_MARKET',
                 stopPrice=take_profit,
-                closePosition=True
+                quantity=quantity,
+                closePosition=False
             )
-            logger.info(f"🎯 Take Profit @ ${take_profit:.2f}")
+            tp_order_id = tp_order.get('orderId')
+            logger.info(f"🎯 Take Profit @ ${take_profit:.2f} (id={tp_order_id})")
             
             # Registrar posición
             position = Position(
                 symbol=symbol,
                 side=side,
-                entry_price=float(order.get('avgPrice', 0)),
+                entry_price=float(order.get('avgPrice', 0) or 0),
                 quantity=quantity,
                 stop_loss=stop_loss,
                 take_profit=take_profit,
-                opened_at=datetime.now()
+                opened_at=datetime.now(),
+                sl_order_id=sl_order_id,
+                tp_order_id=tp_order_id
             )
             self.active_positions[symbol] = position
             
@@ -104,8 +110,8 @@ class B1PositionManager:
                 'quantity': quantity,
                 'stop_loss': stop_loss,
                 'take_profit': take_profit,
-                'sl_order_id': sl_order.get('orderId'),
-                'tp_order_id': tp_order.get('orderId')
+                'sl_order_id': sl_order_id,
+                'tp_order_id': tp_order_id
             }
             
         except Exception as e:
@@ -124,7 +130,7 @@ class B1PositionManager:
             close_side = 'SELL' if position.side == TradeSide.LONG else 'BUY'
             pos_side = 'LONG' if position.side == TradeSide.LONG else 'SHORT'
             
-            order = await self.connector.create_order(
+            await self.connector.create_order(
                 symbol=symbol,
                 side=close_side,
                 positionSide=pos_side,
@@ -132,8 +138,12 @@ class B1PositionManager:
                 quantity=position.quantity
             )
             
-            # Cancelar órdenes pendientes (SL/TP)
-            self.connector.client.futures_cancel_all_open_orders(symbol=symbol)
+            # Cancelar órdenes pendientes (SL/TP) de este positionSide únicamente
+            if position.sl_order_id:
+                await self.connector.cancel_order(symbol, position.sl_order_id)
+            if position.tp_order_id:
+                await self.connector.cancel_order(symbol, position.tp_order_id)
+            await self.connector.cancel_all_orders(symbol=symbol, position_side=pos_side)
             
             del self.active_positions[symbol]
             logger.info(f"✅ Posición {symbol} cerrada")
@@ -164,7 +174,7 @@ class B1PositionManager:
     ) -> bool:
         """
         Actualizar trailing stop.
-        Solo mueve el stop en dirección favorable.
+        Solo mueve el stop en dirección favorable y preserva el Take Profit.
         """
         position = self.active_positions.get(symbol)
         if not position:
@@ -179,24 +189,33 @@ class B1PositionManager:
                 return False
         
         try:
-            # Cancelar SL anterior
-            self.connector.client.futures_cancel_all_open_orders(symbol=symbol)
-            
-            # Crear nuevo SL
             sl_side = 'SELL' if position.side == TradeSide.LONG else 'BUY'
             pos_side = 'LONG' if position.side == TradeSide.LONG else 'SHORT'
             
-            await self.connector.create_order(
+            # Cancelar ÚNICAMENTE el SL anterior (preservando el TP activo)
+            if position.sl_order_id:
+                await self.connector.cancel_order(symbol, position.sl_order_id)
+            else:
+                await self.connector.cancel_all_orders(
+                    symbol=symbol,
+                    position_side=pos_side,
+                    order_types=['STOP_MARKET', 'STOP']
+                )
+            
+            # Crear nuevo SL
+            new_sl_order = await self.connector.create_order(
                 symbol=symbol,
                 side=sl_side,
                 positionSide=pos_side,
                 order_type='STOP_MARKET',
                 stopPrice=new_stop,
-                closePosition=True
+                quantity=position.quantity,
+                closePosition=False
             )
             
             position.stop_loss = new_stop
-            logger.info(f"📍 Trailing stop actualizado: ${new_stop:.2f}")
+            position.sl_order_id = new_sl_order.get('orderId')
+            logger.info(f"📍 Trailing stop actualizado: ${new_stop:.2f} (TP intacto)")
             
             return True
             

@@ -87,32 +87,45 @@ class TrifectaOrchestrator:
         await self.b3.initialize()
 
         # Subscribe B1 (5m)
-        self.data_feed.add_symbol('SOLUSDT')
+        for sym in self.b1.CONFIG.get('symbols', ['SOLUSDT']):
+            self.data_feed.add_symbol(sym)
         self.data_feed.subscribe_engine(self._dispatch_b1)
         
-        # Subscribe B2 (1h) - SOL, AVAX, DOT, ETH
-        for sym in ['SOLUSDT', 'AVAXUSDT', 'DOTUSDT', 'ETHUSDT']:
+        # Subscribe B2 (1h) - ETH, AVAX, DOT
+        for sym in self.b2.CONFIG.get('symbols', ['ETHUSDT', 'AVAXUSDT', 'DOTUSDT']):
             self.data_feed.add_symbol(sym)
         self.data_feed.subscribe_engine(self._dispatch_b2)
         
-        # Subscribe B3 (4h) - BTC, ETH, SOL, LINK, DOT
-        for sym in ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'LINKUSDT', 'DOTUSDT']:
+        # Subscribe B3 (4h) - BTC, PAXG, LINK
+        for sym in self.b3.CONFIG.get('symbols', ['BTCUSDT', 'PAXGUSDT', 'LINKUSDT']):
             self.data_feed.add_symbol(sym)
         self.data_feed.subscribe_engine(self._dispatch_b3)
         
         # Start Data Stream
         self.running = True
         asyncio.create_task(self.data_feed.start())
+        asyncio.create_task(self._v8_scan_loop())
         
         # Monitor Loop (Equity & Kill Switch)
         await self._monitor_loop()
 
+    async def _v8_scan_loop(self):
+        """Escaneo autónomo cada 5 minutos de los 17 activos V8 (B1, B2 y B3) 24/7 en Railway/Local."""
+        import demo_trifecta_2026 as demo
+        while self.running:
+            try:
+                state = demo.load_state()
+                await asyncio.to_thread(demo.run_live_scan, state)
+            except Exception as e:
+                logger.warning(f"⚠️ V8 scan loop warning: {e}")
+            await asyncio.sleep(300)
+
     async def _monitor_loop(self):
         while self.running:
             try:
-                # 1. Check Global Equity
+                # 1. Check Global Equity (non-blocking via asyncio.to_thread)
                 try:
-                    bal = self.connector.get_balance()
+                    bal = await asyncio.to_thread(self.connector.get_balance)
                 except Exception as bal_err:
                     logger.warning(f"⚠️ Balance check failed (will retry): {bal_err}")
                     bal = None
@@ -127,9 +140,6 @@ class TrifectaOrchestrator:
                         await self.emergency_stop("Global Kill Switch Triggered (-15%)")
                         break
                         
-                # 2. Log Status to Supabase every min
-                # await self.state_manager.log_heartbeat(...)
-                
                 await asyncio.sleep(60)
             except Exception as e:
                 logger.error(f"Error in monitor loop: {e}")
@@ -157,10 +167,56 @@ class TrifectaOrchestrator:
                 await self.b3.on_candle_closed(event)
 
     async def _restore_state(self):
-        """Recover from Supabase."""
-        state = await self.state_manager.load_active_positions()
-        # Apply to engines...
-        logger.info("Estado restaurado desde Supabase.")
+        """Recover active positions from Supabase into B1, B2, and B3."""
+        try:
+            state = await self.state_manager.load_active_positions()
+            if not state:
+                logger.info("ℹ️ Sin estado previo en Supabase (se usará sync directo de Binance).")
+                return
+            from datetime import datetime
+            from engines.b1_sprint.engine import Position as B1Position, TradeSide as B1Side
+            from engines.b2_resilience.engine import Position as B2Position, TradeSide as B2Side
+
+            restored_count = 0
+            # Restore B1
+            for sym, pdata in state.get(self.b1.CONFIG['motor_id'], {}).items():
+                side_str = pdata.get('side', 'LONG')
+                self.b1.position_manager.active_positions[sym] = B1Position(
+                    symbol=sym,
+                    side=B1Side.LONG if side_str in ('LONG', 'BUY') else B1Side.SHORT,
+                    entry_price=float(pdata.get('entry_price', 0)),
+                    quantity=float(pdata.get('quantity', 0)),
+                    stop_loss=float(pdata.get('stop_loss', 0)),
+                    take_profit=float(pdata.get('take_profit', 0)),
+                    opened_at=datetime.now(),
+                    sl_order_id=pdata.get('sl_order_id'),
+                    tp_order_id=pdata.get('tp_order_id'),
+                )
+                restored_count += 1
+
+            # Restore B2
+            for sym, pdata in state.get(self.b2.CONFIG['motor_id'], {}).items():
+                side_str = pdata.get('side', 'LONG')
+                self.b2.position_manager.add_position(B2Position(
+                    symbol=sym,
+                    side=B2Side.LONG if side_str in ('LONG', 'BUY') else B2Side.SHORT,
+                    entry_price=float(pdata.get('entry_price', 0)),
+                    quantity=float(pdata.get('quantity', 0)),
+                    stop_loss=float(pdata.get('stop_loss', 0)),
+                    take_profit=float(pdata.get('take_profit', 0)),
+                    leverage=int(pdata.get('leverage', 3)),
+                    opened_at=datetime.now(),
+                ))
+                restored_count += 1
+
+            # Restore B3
+            for sym, pdata in state.get(self.b3.CONFIG['motor_id'], {}).items():
+                self.b3.active_positions[sym] = pdata
+                restored_count += 1
+
+            logger.info(f"✅ Estado restaurado desde Supabase ({restored_count} posiciones).")
+        except Exception as e:
+            logger.warning(f"⚠️ Error restaurando estado desde Supabase: {e}")
 
     async def emergency_stop(self, reason="Unknown"):
         logger.critical(f"🛑 EMERGENCY STOP: {reason}")

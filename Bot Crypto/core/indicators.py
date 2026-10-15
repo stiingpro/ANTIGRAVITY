@@ -57,3 +57,23 @@ def calculate_vwap(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd
     tp = (high + low + close) / 3
     vwap = (tp * volume).cumsum() / volume.cumsum()
     return vwap
+
+def calculate_zscore(data: pd.Series, period: int = 20) -> pd.Series:
+    """Z-Score over rolling window."""
+    ma = data.rolling(window=period).mean()
+    sigma = data.rolling(window=period).std()
+    return (data - ma) / sigma.replace(0, np.nan)
+
+def calculate_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Average Directional Index (ADX - Wilder smoothing)."""
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=high.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=high.index)
+    atr = calculate_atr(high, low, close, period).replace(0, np.nan)
+    plus_di = 100.0 * (plus_dm.ewm(alpha=1/period, adjust=False).mean() / atr)
+    minus_di = 100.0 * (minus_dm.ewm(alpha=1/period, adjust=False).mean() / atr)
+    dx = 100.0 * ((plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan))
+    adx = dx.ewm(alpha=1/period, adjust=False).mean()
+    return adx.fillna(20.0)
+

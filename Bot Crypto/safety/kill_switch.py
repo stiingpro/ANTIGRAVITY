@@ -105,27 +105,28 @@ class KillSwitch:
             return False
     
     async def _emergency_close_all(self):
-        """Cierre de emergencia de todas las posiciones."""
+        """Cierre de emergencia de todas las posiciones (compatible con Hedge Mode y One-Way Mode)."""
         try:
-            # Obtener todas las posiciones
             positions = self.connector.client.futures_position_information()
             
             for pos in positions:
                 amount = float(pos['positionAmt'])
                 symbol = pos['symbol']
+                pos_side = pos.get('positionSide', 'BOTH')
                 
                 if amount != 0:
-                    # Determinar lado de cierre
                     close_side = 'SELL' if amount > 0 else 'BUY'
+                    order_kwargs = {
+                        'symbol': symbol,
+                        'side': close_side,
+                        'type': 'MARKET',
+                        'quantity': abs(amount)
+                    }
+                    if pos_side in ('LONG', 'SHORT'):
+                        order_kwargs['positionSide'] = pos_side
                     
-                    # Cerrar con orden de mercado
-                    self.connector.client.futures_create_order(
-                        symbol=symbol,
-                        side=close_side,
-                        type='MARKET',
-                        quantity=abs(amount)
-                    )
-                    logger.info(f"✅ Cerrada posición {symbol}: {amount}")
+                    self.connector.client.futures_create_order(**order_kwargs)
+                    logger.info(f"✅ Cerrada posición {symbol} ({pos_side}): {amount}")
             
             # Cancelar todas las órdenes pendientes
             for pos in positions:
@@ -134,7 +135,7 @@ class KillSwitch:
                         self.connector.client.futures_cancel_all_open_orders(
                             symbol=pos['symbol']
                         )
-                    except:
+                    except Exception:
                         pass
             
             logger.info("✅ Todas las posiciones cerradas")

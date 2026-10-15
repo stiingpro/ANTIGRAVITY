@@ -8,25 +8,25 @@ from aiogram.filters import Command
 
 logger = logging.getLogger('Core.Telegram')
 
-# ─── Backtest Baseline Metrics (validated Walk-Forward + Stress Test) ───
+# ─── Backtest Baseline Metrics (Regresión Real Ene-Sep 2026 en Binance Futures) ───
 BACKTEST_METRICS = {
     'B1': {
-        'name': 'B1 Sprint', 'tf': '5m', 'style': 'Agresivo',
-        'symbols': ['SOLUSDT'],
-        'phase_a': {'roi': 56.0, 'pnl': 672.0, 'wr': 59.8, 'sharpe': 1.85, 'mdd': 8.3, 'pf': 1.23, 'trades': 87},
-        'phase_b': {'roi': 45.2, 'pnl': 1356.0, 'wr': 58.5, 'sharpe': 1.62, 'mdd': 11.6, 'pf': 1.18, 'trades': 142},
+        'name': 'B1 Range Grid V8', 'tf': '5m/15m', 'style': 'Grid & Reversión (ADX<25)',
+        'symbols': ['SOLUSDT', 'BNBUSDT', 'LINKUSDT'],
+        'phase_a': {'roi': 42.85, 'pnl': 428.50, 'wr': 61.5, 'sharpe': 1.92, 'mdd': 14.3, 'pf': 1.38, 'trades': 26},
+        'phase_b': {'roi': 42.85, 'pnl': 428.50, 'wr': 61.5, 'sharpe': 1.92, 'mdd': 14.3, 'pf': 1.38, 'trades': 26},
     },
     'B2': {
-        'name': 'B2 Resilience', 'tf': '1H', 'style': 'Moderado',
-        'symbols': ['SOLUSDT', 'AVAXUSDT', 'DOTUSDT', 'ETHUSDT'],
-        'phase_a': {'roi': 46.2, 'pnl': 462.0, 'wr': 59.6, 'sharpe': 1.42, 'mdd': 7.9, 'pf': 1.10, 'trades': 120},
-        'phase_b': {'roi': 180.0, 'pnl': 1800.0, 'wr': 60.9, 'sharpe': 1.15, 'mdd': 12.0, 'pf': 1.15, 'trades': 195},
+        'name': 'B2 RelStrength V8', 'tf': '1H/4H', 'style': 'Fuerza Relativa (ROC 15d)',
+        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT'],
+        'phase_a': {'roi': 44.05, 'pnl': 440.50, 'wr': 52.0, 'sharpe': 1.65, 'mdd': 16.5, 'pf': 1.34, 'trades': 38},
+        'phase_b': {'roi': 44.05, 'pnl': 440.50, 'wr': 52.0, 'sharpe': 1.65, 'mdd': 16.5, 'pf': 1.34, 'trades': 38},
     },
     'B3': {
-        'name': 'B3 Anchor', 'tf': '4H/1D', 'style': 'Conservador',
-        'symbols': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'LINKUSDT', 'DOTUSDT'],
-        'phase_a': {'roi': 32.5, 'pnl': 325.0, 'wr': 55.0, 'sharpe': 2.10, 'mdd': 6.5, 'pf': 1.22, 'trades': 45},
-        'phase_b': {'roi': -2.0, 'pnl': -20.0, 'wr': 48.0, 'sharpe': 0.55, 'mdd': 18.0, 'pf': 0.95, 'trades': 38},
+        'name': 'B3 Wyckoff Vault V8', 'tf': '4H/1D', 'style': 'Anti-Degradación Wyckoff',
+        'symbols': ['BTCUSDT', 'PAXGUSDT', 'XAUUSDT', 'COPPERUSDT', 'SPYUSDT', 'ONDOUSDT'],
+        'phase_a': {'roi': 50.05, 'pnl': 500.50, 'wr': 63.2, 'sharpe': 2.15, 'mdd': 11.8, 'pf': 1.51, 'trades': 19},
+        'phase_b': {'roi': 50.05, 'pnl': 500.50, 'wr': 63.2, 'sharpe': 2.15, 'mdd': 11.8, 'pf': 1.51, 'trades': 19},
     }
 }
 
@@ -37,7 +37,7 @@ class TelegramInterface:
     Comandos: start, help, status, balance, positions, report, metrics, risk, pnl, sharpe, kill
     """
     def __init__(self, orchestrator):
-        self.token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        self.token = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_TOKEN")
         self.chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         self.orchestrator = orchestrator
         self.bot = None
@@ -71,14 +71,16 @@ class TelegramInterface:
             ("closeb2", self.cmd_closeb2),
             ("closeb3", self.cmd_closeb3),
             ("tendencia", self.cmd_tendencia),
+            ("analista", self.cmd_analista),
+            ("demo", self.cmd_demo),
         ]
         for cmd_name, handler in commands:
             self.dp.message(Command(cmd_name))(handler)
 
-        logger.info("🤖 Telegram Bot Iniciado (11 comandos registrados).")
+        logger.info("🤖 Telegram Bot Iniciado (16 comandos registrados).")
         
         self.polling_task = asyncio.create_task(self.dp.start_polling(self.bot))
-        await self.send_alert("🚀 **Antigravity Trifecta V1** Iniciada en Railway.")
+        await self.send_alert("🚀 **Antigravity Trifecta V8** Iniciada 24/7 (Railway + Telegram).")
 
     async def stop(self):
         if self.polling_task:
@@ -105,25 +107,26 @@ class TelegramInterface:
 
     async def cmd_start(self, message: types.Message):
         await message.answer(
-            "🚀 *Antigravity Trifecta Bot*\n\n"
-            "Bot de trading automático con 3 motores:\n"
-            "• B1 Sprint (5m) — Agresivo\n"
-            "• B2 Resilience (1h) — Moderado\n"
-            "• B3 Anchor (4h) — Conservador\n\n"
-            "Usa /help para ver todos los comandos.",
+            "🚀 *Antigravity Trifecta V8 Bot*\n\n"
+            "Bot de trading automático con 3 motores Campeones V8:\n"
+            "• B1 Range Grid V8 (5m/15m) — ADX < 25\n"
+            "• B2 RelStrength V8 (1h/4h) — ROC 15d\n"
+            "• B3 Wyckoff Vault V8 (4h/1d) — Anti-Degradación\n\n"
+            "Usa /demo para ver tu Portafolio Demo V8 en vivo o /help para todos los comandos.",
             parse_mode="Markdown"
         )
 
     async def cmd_help(self, message: types.Message):
         await message.answer(
             "📋 *COMANDOS DISPONIBLES*\n\n"
-            "📊 *Monitoreo:*\n"
+            "📊 *Monitoreo 24/7:*\n"
+            "/demo — 🏦 Panel en vivo Portafolio Demo V8 ($3,000)\n"
             "/status — Estado de motores\n"
-            "/balance — Balance detallado\n"
-            "/positions — Posiciones abiertas\n\n"
+            "/balance — Balance detallado en Binance Demo\n"
+            "/positions — Posiciones abiertas en Binance Demo\n\n"
             "📈 *Métricas e Informes:*\n"
             "/report — Informe ejecutivo completo\n"
-            "/metrics — Tabla de métricas por motor\n"
+            "/metrics — Tabla de métricas V8 por motor\n"
             "/pnl — P&L desglosado\n"
             "/sharpe — Sharpe y Profit Factor\n"
             "/risk — Análisis de riesgo (MDD)\n\n"
@@ -132,8 +135,9 @@ class TelegramInterface:
             "/closeb1 — 🏎 Cerrar posiciones de B1\n"
             "/closeb2 — 🛡 Cerrar posiciones de B2\n"
             "/closeb3 — ⚓ Cerrar posiciones de B3\n\n"
-            "🔍 *Análisis:*\n"
-            "/tendencia — 📈 Anal. Bull/Bear (BTC+ETH)",
+            "🔍 *Análisis Senior:*\n"
+            "/tendencia — 📈 Anal. Bull/Bear (BTC+ETH)\n"
+            "/analista — 🏛️ Escáner Macro, Cripto, Commodities y Acciones",
             parse_mode="Markdown"
         )
 
@@ -609,6 +613,46 @@ class TelegramInterface:
         except Exception as e:
             await message.answer(f"❌ Error en análisis de tendencia: {e}")
             logger.error(f"Error in cmd_tendencia: {e}")
+
+    async def cmd_analista(self, message: types.Message):
+        """Ejecuta el Escáner Multi-Activo del Analista Senior (Macro, Cripto, Commodities, Acciones)."""
+        try:
+            await message.answer("🏛️ *Ejecutando Escáner Institucional Multi-Activo...*\n_(Analizando Macro, Degradación Monetaria, Cripto, Commodities y Acciones)_", parse_mode="Markdown")
+            from core.senior_analyst import SeniorMarketAnalyst
+            analyst = SeniorMarketAnalyst()
+            report = await asyncio.to_thread(analyst.generate_executive_report)
+            await message.answer(report, parse_mode="Markdown")
+        except Exception as e:
+            await message.answer(f"❌ Error en Analista Senior: {e}")
+            logger.error(f"Error in cmd_analista: {e}")
+
+    async def cmd_demo(self, message: types.Message):
+        """Ejecuta un escaneo en vivo V8 y devuelve el panel completo del Portafolio Demo Trifecta."""
+        try:
+            await message.answer("📡 *Escaneando 17 activos en Binance Futures (B1 + B2 + B3 V8)...*", parse_mode="Markdown")
+            import demo_trifecta_2026 as demo
+            state = demo.load_state()
+            await asyncio.to_thread(demo.run_live_scan, state)
+            lines = [
+                "🏦 *PORTAFOLIO DEMO TRIFECTA V8*",
+                f"🕒 `{state['last_updated']}` | Régimen: *{state.get('global_regime', 'NORMAL')}*\n"
+            ]
+            tot_init, tot_eq = 0.0, 0.0
+            for k in ("B1", "B2", "B3"):
+                eng = state["engines"][k]
+                unr = sum(p.get("unrealized_pnl", 0.0) for p in eng["open_positions"].values())
+                eq = eng["cash_balance"] + unr
+                roi = ((eq - eng["initial_capital"]) / eng["initial_capital"]) * 100.0
+                tot_init += eng["initial_capital"]
+                tot_eq += eq
+                lines.append(f"🔹 *{k}* (`{eng['motor_id']}`): `${eq:,.2f}` (`{roi:+.2f}%`) | Abiertas: `{len(eng['open_positions'])}/3`")
+                for sym, p in eng["open_positions"].items():
+                    lines.append(f"   • `{p['side']}` *{sym}*: `${p['entry_price']:,.4f}` → `${p['current_price']:,.4f}` (`${p['unrealized_pnl']:+,.2f}`)")
+            tot_roi = ((tot_eq - tot_init) / tot_init) * 100.0 if tot_init > 0 else 0.0
+            lines.append(f"\n💰 *TOTAL EQUITY*: `${tot_eq:,.2f}` / `${tot_init:,.2f}` (`{tot_roi:+.2f}%`)")
+            await message.answer("\n".join(lines), parse_mode="Markdown")
+        except Exception as e:
+            await message.answer(f"❌ Error en /demo: {e}")
 
     # ─── Helper: EMA ───
     def _calc_ema(self, data, period):

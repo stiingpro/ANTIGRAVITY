@@ -1,0 +1,165 @@
+{
+  "benchmarks": {
+    "BTCUSDT": {
+      "open": 87608.3,
+      "close": 83576.9,
+      "final": 953.98,
+      "roi_pct": -4.6
+    },
+    "ETHUSDT": {
+      "open": 2970.4,
+      "close": 2684.68,
+      "final": 903.81,
+      "roi_pct": -9.62
+    },
+    "SOLUSDT": {
+      "open": 124.58,
+      "close": 118.05,
+      "final": 947.58,
+      "roi_pct": -5.24
+    },
+    "PAXGUSDT": {
+      "open": 4335.1,
+      "close": 4164.25,
+      "final": 960.59,
+      "roi_pct": -3.94
+    },
+    "HYPEUSDT": {
+      "open": 25.452,
+      "close": 90.965,
+      "final": 3573.98,
+      "roi_pct": 257.4
+    },
+    "ONDOUSDT": {
+      "open": 0.3586,
+      "close": 0.4995,
+      "final": 1392.92,
+      "roi_pct": 39.29
+    }
+  },
+  "strategies": [
+    {
+      "name": "1. Arbitraje Funding Rate + BFUSD (Delta-Neutral)",
+      "initial": 1000.0,
+      "final": 1222.48,
+      "profit": 222.48,
+      "roi_pct": 22.25,
+      "trades": 819,
+      "win_rate": 100.0,
+      "max_dd_pct": 0.0,
+      "monthly": {
+        "2026-01": 1018.05,
+        "2026-02": 1055.67,
+        "2026-03": 1104.81,
+        "2026-04": 1127.99,
+        "2026-05": 1147.9,
+        "2026-06": 1167.81,
+        "2026-07": 1185.42,
+        "2026-08": 1205.48,
+        "2026-09": 1222.48
+      },
+      "tools": "Binance Spot + USD\u24c8-M Futures (1x-2x Hedge) + BFUSD Collateral",
+      "assets": "HYPEUSDT, TAOUSDT, SOLUSDT, BTCUSDT, ETHUSDT, PAXGUSDT"
+    },
+    {
+      "name": "2. Cazador de Liquidaciones y Squeezes (B1 Evolucionado)",
+      "initial": 1000.0,
+      "final": 1053.62,
+      "profit": 53.62,
+      "roi_pct": 5.36,
+      "trades": 89,
+      "win_rate": 66.3,
+      "profit_factor": 1.08,
+      "max_dd_pct": 17.06,
+      "monthly": {
+        "2026-01": 892.46,
+        "2026-02": 992.83,
+        "2026-03": 1081.65,
+        "2026-04": 1083.19,
+        "2026-05": 1069.38,
+        "2026-06": 940.8,
+        "2026-07": 976.23,
+        "2026-08": 952.91,
+        "2026-09": 1053.62
+      },
+      "tools": "Binance USD\u24c8-M Futures (Isolated 2x) + Detector de Absorci\u00f3n/Squeeze",
+      "assets": "SOLUSDT, ETHUSDT, AVAXUSDT, UNIUSDT, HYPEUSDT, LINKUSDT"
+    },
+    {
+      "name": "3. Rotaci\u00f3n por Fuerza Relativa Cripto + Commodities (B2 Evolucionado)",
+      "initial": 1000.0,
+      "final": 1440.48,
+      "profit": 440.48,
+      "roi_pct": 44.05,
+      "trades": 86,
+      "win_rate": 41.9,
+      "profit_factor": 1.27,
+      "max_dd_pct": 40.72,
+      "monthly": {
+        "2026-01": 960.03,
+        "2026-02": 867.42,
+        "2026-03": 981.49,
+        "2026-04": 943.56,
+        "2026-05": 1415.17,
+        "2026-06": 1044.58,
+        "2026-07": 1042.49,
+        "2026-08": 1037.08,
+        "2026-09": 1440.48
+      },
+      "tools": "Binance USD\u24c8-M Futures Multi-Asset Mode (1.5x) + Rebalanceo de L\u00edderes",
+      "assets": "HYPE, RENDER, ONDO, UNI, TAO, SOL, XAU (Oro), COPPER (Cobre), CL (Petr\u00f3leo), SPY"
+    },
+    {
+      "name": "4. Grid Din\u00e1mico & Reversi\u00f3n en Rangos Laterales (Filtro ADX)",
+      "initial": 1000.0,
+      "final": 1428.54,
+      "profit": 428.54,
+      "roi_pct": 42.85,
+      "trades": 130,
+      "win_rate": 61.5,
+      "profit_factor": 1.42,
+      "max_dd_pct": 14.29,
+      "monthly": {
+        "2026-01": 910.97,
+        "2026-02": 1008.85,
+        "2026-03": 1078.63,
+        "2026-04": 1224.0,
+        "2026-05": 1266.55,
+        "2026-06": 1175.12,
+        "2026-07": 1200.09,
+        "2026-08": 1186.94,
+        "2026-09": 1428.54
+      },
+      "tools": "Binance Futures Grid Bot / Canal Bollinger-Keltner (2.5x)",
+      "assets": "BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT, PAXGUSDT, LINKUSDT"
+    },
+    {
+      "name": "5. B\u00f3veda Anti-Degradaci\u00f3n Monetaria Wyckoff (B3 Evolucionado)",
+      "initial": 1000.0,
+      "final": 1500.52,
+      "profit": 500.52,
+      "roi_pct": 50.05,
+      "trades": 114,
+      "win_rate": 63.2,
+      "profit_factor": 1.51,
+      "max_dd_pct": 24.15,
+      "monthly": {
+        "2026-01": 920.34,
+        "2026-02": 1003.92,
+        "2026-03": 1042.88,
+        "2026-04": 1166.68,
+        "2026-05": 1151.38,
+        "2026-06": 1180.59,
+        "2026-07": 1277.74,
+        "2026-08": 1251.06,
+        "2026-09": 1500.52
+      },
+      "tools": "Binance Spot (PAXG/BTC) + USD\u24c8-M TradFi/RWA Perpetuals (1.5x)",
+      "assets": "PAXG (Oro), COPPER (Cobre), SPY (S&P500), BTC (Bitcoin), ONDO (RWA)"
+    }
+  ],
+  "total_initial": 5000.0,
+  "total_final": 6645.64,
+  "total_profit": 1645.64,
+  "total_roi_pct": 32.91
+}

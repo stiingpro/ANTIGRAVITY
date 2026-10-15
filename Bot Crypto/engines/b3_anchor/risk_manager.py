@@ -114,6 +114,8 @@ class B3RiskManager:
         return qty
 
     def can_trade(self) -> bool:
+        if self.start_balance <= 0:
+            return True
         # Verificar Drawdown global
         dd_pct = (self.start_balance - self.current_equity) / self.start_balance * 100
         if dd_pct > 20.0: # Hard Kill Switch B3

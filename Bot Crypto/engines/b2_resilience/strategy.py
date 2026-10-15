@@ -117,17 +117,28 @@ class B2Strategy:
         highs_4h = [float(k[2]) for k in klines_4h]
         lows_4h = [float(k[3]) for k in klines_4h]
         
-        # ========== 4H: DIRECCIÓN MACRO ==========
+        # ========== 4H: DIRECCIÓN MACRO & FUERZA RELATIVA ==========
         
+        ema20_4h = self._ema(closes_4h, 20)
+        ema50_4h = self._ema(closes_4h, 50)
         ema200_4h = self._ema(closes_4h, self.ema_macro)
         atr_4h = self._atr(highs_4h, lows_4h, closes_4h, self.atr_period)
+        adx_4h = self._adx(highs_4h, lows_4h, closes_4h, 14)
         price_4h = closes_4h[-1]
         
-        macro_bullish = price_4h > ema200_4h
-        macro_bearish = price_4h < ema200_4h
+        # Filtro ADX: Si ADX(4H) < 18, el activo está en rango sin tendencia (lo opera B1, no B2)
+        if adx_4h < 18.0:
+            return None
+
+        # Fuerza Relativa (ROC de 7 días = 42 velas 4H, ROC de 15 días = 90 velas 4H)
+        roc_7d = (price_4h / closes_4h[-42] - 1.0) * 100.0 if len(closes_4h) >= 42 else 0.0
+        roc_15d = (price_4h / closes_4h[-90] - 1.0) * 100.0 if len(closes_4h) >= 90 else 0.0
+
+        macro_bullish = price_4h > ema50_4h and (price_4h > ema200_4h or roc_15d > 6.0)
+        macro_bearish = price_4h < ema50_4h and price_4h < ema200_4h
         macro_dist_pct = abs(price_4h - ema200_4h) / ema200_4h * 100 if ema200_4h > 0 else 0
         
-        # ========== V7: SELECCIÓN DINÁMICA DE PARAMS ==========
+        # ========== V8: SELECCIÓN DINÁMICA DE PARAMS ==========
         regime = self.BULL_PARAMS if macro_bullish else self.BEAR_PARAMS
         sl_atr_mult = regime['sl_atr_mult']
         tp_atr_mult = regime['tp_atr_mult']
@@ -136,11 +147,11 @@ class B2Strategy:
         rsi_short_min = regime['rsi_short_min']
         rsi_short_max = regime['rsi_short_max']
         min_strength = regime['min_strength']
-        max_leverage = regime['max_leverage']
+        max_leverage = min(3, regime['max_leverage'])
         
         # ========== 1H: EJECUCIÓN ==========
         
-        # EMA crossover
+        # EMA crossover o pullback a EMA20 en líder de Fuerza Relativa
         ema20 = self._ema(closes_1h, self.ema_fast)
         ema50 = self._ema(closes_1h, self.ema_slow)
         prev_ema20 = self._ema(closes_1h[:-1], self.ema_fast)
@@ -148,8 +159,8 @@ class B2Strategy:
         
         bullish_cross = prev_ema20 <= prev_ema50 and ema20 > ema50
         bearish_cross = prev_ema20 >= prev_ema50 and ema20 < ema50
-        ema_above = ema20 > ema50
-        ema_below = ema20 < ema50
+        ema_above = price > ema20 > ema50
+        ema_below = price < ema20 < ema50
         
         # RSI
         rsi = self._rsi(closes_1h, self.rsi_period)
@@ -163,23 +174,30 @@ class B2Strategy:
         rsi_div_bullish = self._check_rsi_divergence(closes_1h, 'bullish')
         
         # SL/TP basado en ATR(4H) con multiplicadores dinámicos
-        sl_dist = atr_4h * sl_atr_mult if atr_4h > 0 else price * 0.02
-        tp_dist = atr_4h * tp_atr_mult if atr_4h > 0 else price * 0.04
+        sl_dist = atr_4h * sl_atr_mult if atr_4h > 0 else price * 0.025
+        tp_dist = atr_4h * tp_atr_mult if atr_4h > 0 else price * 0.05
         
         prec = self._price_precision(symbol)
         
-        # ========== SCORING LONG ==========
+        # ========== SCORING LONG (FUERZA RELATIVA ALCISTA) ==========
         long_score = 0.0
         long_reasons = []
         
-        if macro_bullish:
+        if macro_bullish and roc_15d > 4.0:
             if bullish_cross:
                 long_score += 0.35
                 long_reasons.append("EMA20x50↑")
-            elif ema_above:
-                long_score += 0.15
-                long_reasons.append("EMA20>50")
+            elif ema_above and price_4h > ema20_4h:
+                long_score += 0.25
+                long_reasons.append("RelStrength>EMA20")
             
+            if roc_15d >= 10.0:
+                long_score += 0.25
+                long_reasons.append(f"ROC15d=+{roc_15d:.1f}%")
+            elif roc_15d >= 5.0:
+                long_score += 0.15
+                long_reasons.append(f"ROC15d=+{roc_15d:.1f}%")
+
             if rsi_long_min <= rsi <= rsi_long_max:
                 long_score += 0.20
                 long_reasons.append(f"RSI={rsi:.0f}")
@@ -188,29 +206,29 @@ class B2Strategy:
                 long_score += 0.10
                 long_reasons.append("Vol✓")
             
-            if macro_dist_pct > 2.0:
-                long_score += 0.15
-                long_reasons.append(f">EMA200({macro_dist_pct:.1f}%)")
-            elif macro_dist_pct > 0.5:
-                long_score += 0.10
-                long_reasons.append(">EMA200")
-            
             if rsi_div_bearish:
-                long_score -= 0.20
+                long_score -= 0.25
                 long_reasons.append("RSIdiv↓ ⚠️")
         
-        # ========== SCORING SHORT ==========
+        # ========== SCORING SHORT (DEBILIDAD RELATIVA BAJISTA) ==========
         short_score = 0.0
         short_reasons = []
         
-        if macro_bearish:
+        if macro_bearish and roc_15d < -4.0:
             if bearish_cross:
                 short_score += 0.35
                 short_reasons.append("EMA20x50↓")
-            elif ema_below:
-                short_score += 0.15
-                short_reasons.append("EMA20<50")
+            elif ema_below and price_4h < ema20_4h:
+                short_score += 0.25
+                short_reasons.append("Weakness<EMA20")
             
+            if roc_15d <= -10.0:
+                short_score += 0.25
+                short_reasons.append(f"ROC15d={roc_15d:.1f}%")
+            elif roc_15d <= -5.0:
+                short_score += 0.15
+                short_reasons.append(f"ROC15d={roc_15d:.1f}%")
+
             if rsi_short_min <= rsi <= rsi_short_max:
                 short_score += 0.20
                 short_reasons.append(f"RSI={rsi:.0f}")
@@ -219,15 +237,8 @@ class B2Strategy:
                 short_score += 0.10
                 short_reasons.append("Vol✓")
             
-            if macro_dist_pct > 2.0:
-                short_score += 0.15
-                short_reasons.append(f"<EMA200({macro_dist_pct:.1f}%)")
-            elif macro_dist_pct > 0.5:
-                short_score += 0.10
-                short_reasons.append("<EMA200")
-            
             if rsi_div_bullish:
-                short_score -= 0.20
+                short_score -= 0.25
                 short_reasons.append("RSIdiv↑ ⚠️")
         
         # ========== GENERAR SEÑAL ==========
@@ -334,7 +345,9 @@ class B2Strategy:
         prec_map = {
             'SOLUSDT': 2, 'AVAXUSDT': 3, 'DOTUSDT': 3,
             'ETHUSDT': 2, 'BTCUSDT': 1, 'BNBUSDT': 2,
-            'LINKUSDT': 3
+            'LINKUSDT': 3, 'RENDERUSDT': 3, 'UNIUSDT': 3,
+            'TAOUSDT': 2, 'HYPEUSDT': 3, 'XAGUSDT': 3,
+            'CLUSDT': 2
         }
         return prec_map.get(symbol, 2)
     
@@ -347,19 +360,21 @@ class B2Strategy:
             ema = (val * mult) + (ema * (1 - mult))
         return ema
     
-    def _rsi(self, closes: List[float], period: int) -> float:
+    def _rsi(self, closes: List[float], period: int = 14) -> float:
+        """Wilder's RMA RSI."""
         if len(closes) < period + 1:
             return 50.0
-        gains, losses = [], []
-        for i in range(1, len(closes)):
-            change = closes[i] - closes[i-1]
-            gains.append(max(0, change))
-            losses.append(max(0, -change))
-        avg_gain = sum(gains[-period:]) / period
-        avg_loss = sum(losses[-period:]) / period
+        deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+        gains = [max(0.0, d) for d in deltas]
+        losses = [max(0.0, -d) for d in deltas]
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        for i in range(period, len(deltas)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
         if avg_loss == 0:
             return 100.0
-        return 100 - (100 / (1 + avg_gain / avg_loss))
+        return 100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
     
     def _atr(self, highs: List[float], lows: List[float], 
              closes: List[float], period: int) -> float:
@@ -374,3 +389,30 @@ class B2Strategy:
             )
             tr_values.append(tr)
         return sum(tr_values[-period:]) / min(period, len(tr_values)) if tr_values else 0
+
+    def _adx(self, highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
+        """ADX direccional para confirmar fuerza de tendencia (> 18)."""
+        if len(closes) < period * 2 + 1:
+            return 22.0
+        plus_dm, minus_dm, tr_list = [], [], []
+        for i in range(1, len(closes)):
+            up_move = highs[i] - highs[i - 1]
+            down_move = lows[i - 1] - lows[i]
+            plus_dm.append(up_move if (up_move > down_move and up_move > 0) else 0.0)
+            minus_dm.append(down_move if (down_move > up_move and down_move > 0) else 0.0)
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+            tr_list.append(tr)
+        dx_list = []
+        for i in range(period, len(tr_list)):
+            tr_sum = sum(tr_list[i - period:i])
+            if tr_sum == 0:
+                dx_list.append(0.0)
+                continue
+            p_di = 100.0 * sum(plus_dm[i - period:i]) / tr_sum
+            m_di = 100.0 * sum(minus_dm[i - period:i]) / tr_sum
+            denom = p_di + m_di
+            dx_list.append(100.0 * abs(p_di - m_di) / denom if denom > 0 else 0.0)
+        if not dx_list:
+            return 22.0
+        return sum(dx_list[-period:]) / min(period, len(dx_list))
+
