@@ -6,13 +6,13 @@ de la regresión Ene-Sep 2026) conectándose en tiempo real a los datos de
 Binance Futures (https://fapi.binance.com) con una cuenta Demo persistente
 de $3,000 USD ($1,000 USD por motor) y espejo opcional en Binance Testnet.
 
-Motores activos:
-  - B1 (B1_RANGE_GRID_V8): Grid Dinámico & Reversión en Rango (ADX < 25)
+Motores activos (Cartera Propia V8.1 — 16 Activos):
+  - B1 (B1_RANGE_GRID_V8 - 20% Capital = $600): Grid Dinámico & Reversión en Rango (ADX < 25)
     Activos: SOLUSDT, BNBUSDT, LINKUSDT
-  - B2 (B2_REL_STRENGTH_V8): Rotación por Fuerza Relativa (ROC 15d + ADX > 18)
-    Activos: ETHUSDT, AVAXUSDT, RENDERUSDT, UNIUSDT, TAOUSDT, HYPEUSDT, XAGUSDT, CLUSDT, NVDAUSDT
-  - B3 (B3_ANTI_DEBASEMENT_V8): Bóveda Anti-Degradación Wyckoff (RSI < 33 / Z < -1.65)
-    Activos: BTCUSDT, PAXGUSDT, XAUUSDT, COPPERUSDT, SPYUSDT, QQQUSDT, ONDOUSDT
+  - B2 (B2_REL_STRENGTH_V8 - 40% Capital = $1,200): Rotación por Fuerza Relativa (ROC 15d + ADX > 18)
+    Activos: ETHUSDT, RENDERUSDT, UNIUSDT, TAOUSDT, HYPEUSDT, XAGUSDT, CLUSDT, NVDAUSDT
+  - B3 (B3_ANTI_DEBASEMENT_V8 - 40% Capital = $1,200): Bóveda Anti-Degradación Wyckoff (RSI < 30.5 / Z < -1.80)
+    Activos: BTCUSDT, PAXGUSDT, COPPERUSDT, SPYUSDT, QQQUSDT
 
 Uso:
   py demo_trifecta_2026.py --once              # Escaneo en vivo único + reporte completo
@@ -192,7 +192,7 @@ def fetch_binance_price(symbol: str) -> float:
 
 
 def init_default_state() -> Dict:
-    """Inicializa el portafolio Demo con $3,000 USD ($1,000 en cada motor)."""
+    """Inicializa el portafolio Demo con $3,000 USD (Asignación V8.1: $600 B1 [20%], $1,200 B2 [40%], $1,200 B3 [40%])."""
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return {
         "created_at": now_str,
@@ -204,8 +204,8 @@ def init_default_state() -> Dict:
                 "motor_id": B1SprintEngine.CONFIG["motor_id"],
                 "name": "Grid Dinámico & Reversión en Rango (ADX < 25)",
                 "symbols": B1SprintEngine.CONFIG["symbols"],
-                "initial_capital": 1000.0,
-                "cash_balance": 1000.0,
+                "initial_capital": 600.0,
+                "cash_balance": 600.0,
                 "realized_pnl": 0.0,
                 "wins": 0,
                 "losses": 0,
@@ -216,8 +216,8 @@ def init_default_state() -> Dict:
                 "motor_id": B2ResilienceEngine.CONFIG["motor_id"],
                 "name": "Rotación Fuerza Relativa Multi-Activo (ROC 15d)",
                 "symbols": B2ResilienceEngine.CONFIG["symbols"],
-                "initial_capital": 1000.0,
-                "cash_balance": 1000.0,
+                "initial_capital": 1200.0,
+                "cash_balance": 1200.0,
                 "realized_pnl": 0.0,
                 "wins": 0,
                 "losses": 0,
@@ -228,8 +228,8 @@ def init_default_state() -> Dict:
                 "motor_id": B3AnchorEngine.CONFIG["motor_id"],
                 "name": "Bóveda Anti-Degradación Monetaria Wyckoff",
                 "symbols": B3AnchorEngine.CONFIG["symbols"],
-                "initial_capital": 1000.0,
-                "cash_balance": 1000.0,
+                "initial_capital": 1200.0,
+                "cash_balance": 1200.0,
                 "realized_pnl": 0.0,
                 "wins": 0,
                 "losses": 0,
@@ -264,7 +264,7 @@ def save_state(state: Dict):
 
 
 def update_and_check_positions(engine_key: str, eng_state: Dict, live_prices: Dict[str, float]) -> List[str]:
-    """Actualiza PnL flotante y verifica si alguna posición abierta tocó SL o TP."""
+    """Actualiza PnL flotante, aplica Candado de Ganancias V8.1 (Auto-Breakeven & Escalón) y verifica SL/TP."""
     events = []
     to_close = []
 
@@ -275,6 +275,7 @@ def update_and_check_positions(engine_key: str, eng_state: Dict, live_prices: Di
         entry = pos["entry_price"]
         qty = pos["quantity"]
         notional = pos["notional"]
+        lev = max(1, int(pos.get("leverage", 2)))
 
         if side in ("LONG", "BUY"):
             raw_pnl = (price - entry) * qty
@@ -288,7 +289,38 @@ def update_and_check_positions(engine_key: str, eng_state: Dict, live_prices: Di
         fee_est = notional * TAKER_FEE * 2
         net_pnl = raw_pnl - fee_est
         pos["unrealized_pnl"] = round(net_pnl, 2)
-        pos["unrealized_pnl_pct"] = round((net_pnl / pos["margin"]) * 100, 2) if pos["margin"] > 0 else 0.0
+        pnl_pct = round((net_pnl / pos["margin"]) * 100, 2) if pos["margin"] > 0 else 0.0
+        pos["unrealized_pnl_pct"] = pnl_pct
+
+        # ─── V8.1 MEJORA 1: CANDADO AUTOMÁTICO DE GANANCIAS (Auto-Breakeven & Trailing Escalón) ───
+        if not hit_tp and not hit_sl:
+            old_sl = pos["stop_loss"]
+            if pnl_pct >= 8.0:
+                # Escalón 2 (+8% ROI sobre margen) -> Asegurar +4.5% sobre margen
+                lock_move = 0.045 / lev
+                if side in ("LONG", "BUY"):
+                    new_sl = round(entry * (1.0 + lock_move), 4)
+                    if new_sl > old_sl:
+                        pos["stop_loss"] = new_sl
+                        events.append(f"[{engine_key}] 🔒 CANDADO NIVEL 2 (+4.5% asegurado) en {sym} {side}: SL subido a ${new_sl:,.4f}")
+                else:
+                    new_sl = round(entry * (1.0 - lock_move), 4)
+                    if old_sl == 0 or new_sl < old_sl:
+                        pos["stop_loss"] = new_sl
+                        events.append(f"[{engine_key}] 🔒 CANDADO NIVEL 2 (+4.5% asegurado) en {sym} {side}: SL bajado a ${new_sl:,.4f}")
+            elif pnl_pct >= 4.0:
+                # Escalón 1 (+4% ROI sobre margen) -> Asegurar Breakeven Positivo (+0.6% sobre margen)
+                lock_move = 0.006 / lev
+                if side in ("LONG", "BUY"):
+                    new_sl = round(entry * (1.0 + lock_move), 4)
+                    if new_sl > old_sl:
+                        pos["stop_loss"] = new_sl
+                        events.append(f"[{engine_key}] 🛡️ CANDADO BREAKEVEN (+0.6% asegurado) en {sym} {side}: SL protegido en ${new_sl:,.4f}")
+                else:
+                    new_sl = round(entry * (1.0 - lock_move), 4)
+                    if old_sl == 0 or new_sl < old_sl:
+                        pos["stop_loss"] = new_sl
+                        events.append(f"[{engine_key}] 🛡️ CANDADO BREAKEVEN (+0.6% asegurado) en {sym} {side}: SL protegido en ${new_sl:,.4f}")
 
         if hit_tp:
             to_close.append((sym, price, "TAKE_PROFIT", net_pnl))
@@ -428,7 +460,7 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
                 "price": price,
                 "metric_1": f"RSI(4H): {rsi_4h:.1f}",
                 "metric_2": f"Z-Score(4H): {z_4h:+.2f}",
-                "filter": "RSI < 33 o Z < -1.65",
+                "filter": "RSI < 30.5 o Z < -1.80",
                 "status": status_txt
             })
         except Exception as e:
@@ -441,8 +473,12 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
     state["global_regime"] = getattr(B3AnchorEngine, "GLOBAL_REGIME", "NORMAL")
     events.extend(update_and_check_positions("B3", b3_state, live_prices))
 
-    # ─── 2. ESCANEO MOTOR B1 (Grid Dinámico & Reversión en Rango ADX < 25) ───
+    # ─── 2. ESCANEO MOTOR B1 (Grid Dinámico & Reversión en Rango ADX < 25 + Escudo Bajista B2) ───
     b1_state = state["engines"]["B1"]
+    b2_state = state["engines"]["B2"]
+    b2_active_shorts = sum(1 for p in b2_state["open_positions"].values() if p.get("side") == "SHORT")
+    b1_strat.b2_bear_shield = (b2_active_shorts >= 3)
+
     for sym in B1SprintEngine.CONFIG["symbols"]:
         try:
             klines_5m = fetch_binance_klines(sym, "5m", limit=100)
@@ -463,6 +499,8 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
             sig = b1_strat.analyze(data_5m, data_15m)
             if adx_15m >= 25.0:
                 status_txt = f"PAUSADO POR TENDENCIA FUERTE (ADX {adx_15m:.1f} >= 25)"
+            elif b1_strat.b2_bear_shield:
+                status_txt = f"ESCUDO BAJISTA B2 ACTIVO ({b2_active_shorts} SHORTs en B2 bloquean LONGs)"
             elif sig:
                 status_txt = f"SEÑAL {sig.side.name}: {sig.reason}"
                 ev = open_demo_position(
@@ -493,7 +531,6 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
     events.extend(update_and_check_positions("B1", b1_state, live_prices))
 
     # ─── 3. ESCANEO MOTOR B2 (Rotación Institucional por Fuerza Relativa ROC 15d) ───
-    b2_state = state["engines"]["B2"]
     b2_candidates = []
     for sym in B2ResilienceEngine.CONFIG["symbols"]:
         try:
@@ -533,6 +570,9 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
                 "filter": "-", "status": "Error de conexión"
             })
 
+    # Primero actualizar y aplicar Candados de Ganancias V8.1 en B2 antes de evaluar nuevos cupos
+    events.extend(update_and_check_positions("B2", b2_state, live_prices))
+
     # Ordenar candidatos de B2 por mayor Fuerza Relativa (ROC 15d) para entrar primero en los líderes
     b2_candidates.sort(key=lambda x: x[0], reverse=True)
     for _, sig in b2_candidates:
@@ -544,14 +584,12 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
         if ev:
             events.append(ev)
 
-    events.extend(update_and_check_positions("B2", b2_state, live_prices))
-
     # ─── 4. SINCRONIZAR CON LAS 3 API KEYS DE BINANCE DEMO TRADING (B1/B2/B3_TESTNET) ───
     sync_events = sync_positions_to_binance_demo_api(state)
     events.extend(sync_events)
 
     if events:
-        tg_msg = "⚡ ACTUALIZACIÓN DEMO TRIFECTA V8:\n" + "\n".join(f"• {e}" for e in events[:8])
+        tg_msg = "⚡ ACTUALIZACIÓN DEMO TRIFECTA V8.1:\n" + "\n".join(f"• {e}" for e in events[:8])
         send_telegram_alert(tg_msg)
 
     state["scans_completed"] = state.get("scans_completed", 0) + 1
@@ -562,7 +600,7 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
 def print_dashboard(state: Dict, scan_result: Optional[Dict] = None):
     """Imprime el panel ejecutivo de la Demo en consola."""
     print("\n" + "═" * 100)
-    print(f"🏦 PANEL DEMO EN VIVO BINANCE FUTURES — ARQUITECTURA TRIFECTA 2026 (V8)")
+    print(f"🏦 PANEL DEMO EN VIVO BINANCE FUTURES — ARQUITECTURA TRIFECTA 2026 (V8.1 CARTERA PROPIA)")
     print(f"🕒 Actualizado: {state['last_updated']} | Escaneos: {state['scans_completed']} | Régimen Macro B3: {state.get('global_regime', 'NORMAL')}")
     print("═" * 100)
 
@@ -580,12 +618,13 @@ def print_dashboard(state: Dict, scan_result: Optional[Dict] = None):
         total_initial += init_cap
         total_equity += equity
         total_open += len(eng["open_positions"])
+        max_slots = 3 if key == "B1" else 4
 
         print(
             f"🔹 {key} [{eng['motor_id']}] — {eng['name']}\n"
-            f"   Capital Inicial: ${init_cap:,.2f} | Equity Actual: ${equity:,.2f} ({roi_pct:+.2f}%) | "
+            f"   Capital Base: ${init_cap:,.2f} | Equity Actual: ${equity:,.2f} ({roi_pct:+.2f}%) | "
             f"PnL Realizado: ${eng['realized_pnl']:+,.2f} | PnL Flotante: ${unrealized:+,.2f} | "
-            f"W/L: {eng['wins']}/{eng['losses']} | Posiciones Abiertas: {len(eng['open_positions'])}/3"
+            f"W/L: {eng['wins']}/{eng['losses']} | Posiciones Abiertas: {len(eng['open_positions'])}/{max_slots}"
         )
         if eng["open_positions"]:
             for sym, p in eng["open_positions"].items():
@@ -611,7 +650,7 @@ def print_dashboard(state: Dict, scan_result: Optional[Dict] = None):
         else:
             print("\nℹ️ Sin cierres ni nuevas aperturas en este segundo exacto.")
 
-        print("\n📡 RADAR EN TIEMPO REAL DE LOS 19 ACTIVOS EN BINANCE FUTURES:")
+        print("\n📡 RADAR EN TIEMPO REAL DE LOS 16 ACTIVOS EN BINANCE FUTURES (V8.1):")
         for key in ("B1", "B2", "B3"):
             print(f"\n  [{key} — {state['engines'][key]['motor_id']}]")
             for d in scan_result["diagnostics"][key]:
@@ -639,7 +678,7 @@ def _send_tg_message(tok: str, chat_id: str, text: str):
 
 def _build_demo_telegram_text(state: Dict) -> str:
     lines = [
-        "🏦 *PORTAFOLIO DEMO TRIFECTA V8*",
+        "🏦 *PORTAFOLIO DEMO TRIFECTA V8.1 (CARTERA PROPIA)*",
         f"🕒 `{state['last_updated']}` | Escaneos: `{state.get('scans_completed', 0)}` | Régimen: *{state.get('global_regime', 'NORMAL')}*\n"
     ]
     tot_init, tot_eq = 0.0, 0.0
@@ -650,11 +689,12 @@ def _build_demo_telegram_text(state: Dict) -> str:
         roi = ((eq - eng["initial_capital"]) / eng["initial_capital"]) * 100.0
         tot_init += eng["initial_capital"]
         tot_eq += eq
-        lines.append(f"🔹 *{k}* (`{eng['motor_id']}`): `${eq:,.2f}` (`{roi:+.2f}%`) | Abiertas: `{len(eng['open_positions'])}/3`")
+        max_slots = 3 if k == "B1" else 4
+        lines.append(f"🔹 *{k}* (`{eng['motor_id']}`): `${eq:,.2f}` (`{roi:+.2f}%`) | Abiertas: `{len(eng['open_positions'])}/{max_slots}`")
         for sym, p in eng["open_positions"].items():
             lines.append(
                 f"   • `{p['side']}` *{sym}*: `${p['entry_price']:,.4f}` → `${p['current_price']:,.4f}` "
-                f"| PnL: `${p['unrealized_pnl']:+,.2f}` (`{p['unrealized_pnl_pct']:+.2f}%`)"
+                f"| SL: `${p['stop_loss']:,.4f}` | PnL: `${p['unrealized_pnl']:+,.2f}` (`{p['unrealized_pnl_pct']:+.2f}%`)"
             )
     tot_roi = ((tot_eq - tot_init) / tot_init) * 100.0 if tot_init > 0 else 0.0
     lines.append(f"\n💰 *TOTAL EQUITY DEMO*: `${tot_eq:,.2f}` / `${tot_init:,.2f}` (`{tot_roi:+.2f}%`)")
@@ -723,7 +763,7 @@ def process_pending_telegram_commands(offset_holder: List[int]):
 
             cmd = text.split()[0].lower().split("@")[0]
             if cmd in ("/demo", "/status", "/positions", "/pnl", "/balance"):
-                _send_tg_message(tok, chat_id, "📡 *Actualizando precios en vivo de los 19 activos en Binance Futures...*")
+                _send_tg_message(tok, chat_id, "📡 *Actualizando precios en vivo de los 16 activos en Binance Futures (V8.1)...*")
                 st = load_state()
                 run_live_scan(st)
                 _send_tg_message(tok, chat_id, _build_demo_telegram_text(st))

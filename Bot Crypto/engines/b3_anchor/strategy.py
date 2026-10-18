@@ -31,8 +31,8 @@ class B3Strategy:
         self.bb_period = config.get('bb_period', 20)
         self.bb_std = config.get('bb_std', 2.0)
         self.atr_period = config.get('atr_period', 14)
-        self.rsi_buy = config.get('rsi_buy_threshold', 33.0)
-        self.z_buy = config.get('z_buy_threshold', -1.65)
+        self.rsi_buy = config.get('rsi_buy_threshold', 30.5)
+        self.z_buy = config.get('z_buy_threshold', -1.80)
         self.rsi_sell = config.get('rsi_sell_threshold', 64.0)
         
     def analyze(self, data_4h: Dict, data_1d: Optional[Dict] = None) -> Optional[TradeSignal]:
@@ -93,7 +93,8 @@ class B3Strategy:
         
         # ═══ SEÑAL 1: ACUMULACIÓN WYCKOFF EN DESCUENTO PROFUNDO (LONG) ═══
         if deep_discount and bullish_absorption:
-            sl_dist = min(current_price * 0.065, max(atr_val * 2.8, current_price * 0.025))
+            # V8.1 Mejora 3: Respiro institucional de 3.5% mínimo para evitar barridos de liquidez en índices
+            sl_dist = min(current_price * 0.065, max(atr_val * 2.8, current_price * 0.035))
             tp_dist = max(current_price * 0.14, atr_val * 5.5)
             
             stop_loss = current_price - sl_dist

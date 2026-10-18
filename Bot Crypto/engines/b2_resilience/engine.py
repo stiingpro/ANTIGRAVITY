@@ -80,8 +80,8 @@ class B2ResilienceEngine:
         'motor_id': 'B2_REL_STRENGTH_V8',
         'version': '8.0',
         
-        # Activos exclusivos B2: Cripto Narrativas (IA/DeFi/L1) + Plata, Petróleo y NVIDIA en Binance Futures
-        'symbols': ['ETHUSDT', 'AVAXUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT', 'NVDAUSDT'],
+        # Activos exclusivos B2 V8.1: Cripto Líderes (ETH/IA/DeFi) + Plata, Petróleo y NVIDIA en Binance Futures
+        'symbols': ['ETHUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT', 'NVDAUSDT'],
         'symbol': 'ETHUSDT',  # Default para display
         
         # Timeframes

@@ -76,7 +76,19 @@ class B1Strategy:
             atr_val = entry * 0.015
 
         # 4. Señal LONG: Barrido del borde inferior (prev_z < -1.45 o low <= bb_l) + RSI < 40 + vela alcista
-        if (prev_z < -self.z_threshold or lows[-2] <= prev_l) and rsi_val < 40 and closes[-1] > opens[-1] and closes[-1] > closes[-2]:
+        # V8.1 Mejora 2 (Filtro Anti-Cuchillo): Si Z < -2.8 (desplome violento), exigir confirmación 5m sobre el high previo
+        # V8.1 Mejora 4 (Escudo Bajista B2): Si B2 tiene >= 3 SHORTs activos, bloquear LONGs en B1
+        klines_5m = data_5m.get('klines', [])
+        anti_knife_ok = True
+        if prev_z < -2.8 and len(klines_5m) >= 2:
+            c5_now = float(klines_5m[-1][4])
+            o5_now = float(klines_5m[-1][1])
+            h5_prev = float(klines_5m[-2][2])
+            anti_knife_ok = (c5_now > o5_now) and (c5_now > h5_prev)
+
+        bear_shield_active = getattr(self, 'b2_bear_shield', False)
+
+        if not bear_shield_active and anti_knife_ok and (prev_z < -self.z_threshold or lows[-2] <= prev_l) and rsi_val < 40 and closes[-1] > opens[-1] and closes[-1] > closes[-2]:
             sl = round(entry - 1.8 * atr_val, prec)
             tp = round(max(bb_u, entry + 2.4 * atr_val), prec)
             strength = min(1.0, abs(prev_z) / 2.0)

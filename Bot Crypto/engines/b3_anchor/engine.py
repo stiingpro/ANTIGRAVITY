@@ -9,10 +9,10 @@ logger = logging.getLogger('B3_ANCHOR')
 
 class B3AnchorEngine:
     """
-    Motor B3 (ANTI-DEBASEMENT VAULT) - V8 Champion
+    Motor B3 (ANTI-DEBASEMENT VAULT) - V8.1 Champion
     - Timeframes: 1D (Macro Context), 4H (Wyckoff Deep Value Entry & Strength Exit)
-    - Assets: BTCUSDT, PAXGUSDT, XAUUSDT, COPPERUSDT, SPYUSDT, QQQUSDT, ONDOUSDT
-    - Logic: Wyckoff Deep Value Accumulation (RSI < 33 o Z-Score < -1.65 + Bullish Reversal)
+    - Assets: BTCUSDT, PAXGUSDT, COPPERUSDT, SPYUSDT, QQQUSDT (5 Activos Inmortales Puros)
+    - Logic: Wyckoff Deep Value Accumulation (RSI < 30.5 o Z-Score < -1.80 + Bullish Reversal)
              y Venta en Fortaleza (RSI >= 64 o Banda Superior de Bollinger)
     - Regresión 2026 (Ene-Sep): +50.05% ROI, Win Rate 63.2%, Profit Factor 1.51
     """
@@ -21,14 +21,14 @@ class B3AnchorEngine:
     
     CONFIG = {
         'motor_id': 'B3_ANTI_DEBASEMENT_V8',
-        # Activos exclusivos de Reserva de Valor Anti-Degradación Monetaria + Índices de IA (QQQ)
-        'symbols': ['BTCUSDT', 'PAXGUSDT', 'XAUUSDT', 'COPPERUSDT', 'SPYUSDT', 'QQQUSDT', 'ONDOUSDT'],
+        # Activos Inmortales de Reserva de Valor Anti-Degradación Monetaria + Índices de IA (QQQ)
+        'symbols': ['BTCUSDT', 'PAXGUSDT', 'COPPERUSDT', 'SPYUSDT', 'QQQUSDT'],
         'timeframes': ['4h', '1d'],
         'max_leverage': 2,
         'ema_fast': 50, 'ema_slow': 200,
         'bb_period': 20, 'bb_std': 2.0,
-        'rsi_buy_threshold': 33.0,
-        'z_buy_threshold': -1.65,
+        'rsi_buy_threshold': 30.5,
+        'z_buy_threshold': -1.80,
         'rsi_sell_threshold': 64.0
     }
 
