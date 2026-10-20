@@ -11,19 +11,19 @@ logger = logging.getLogger('Core.Telegram')
 # ─── Backtest Baseline Metrics (Regresión Real Ene-Sep 2026 en Binance Futures) ───
 BACKTEST_METRICS = {
     'B1': {
-        'name': 'B1 Range Grid V8', 'tf': '5m/15m', 'style': 'Grid & Reversión (ADX<25)',
+        'name': 'B1 Range Grid V8.2', 'tf': '5m/15m', 'style': 'Grid & Reversión (ADX<25)',
         'symbols': ['SOLUSDT', 'BNBUSDT', 'LINKUSDT'],
         'phase_a': {'roi': 42.85, 'pnl': 428.50, 'wr': 61.5, 'sharpe': 1.92, 'mdd': 14.3, 'pf': 1.38, 'trades': 26},
         'phase_b': {'roi': 42.85, 'pnl': 428.50, 'wr': 61.5, 'sharpe': 1.92, 'mdd': 14.3, 'pf': 1.38, 'trades': 26},
     },
     'B2': {
-        'name': 'B2 RelStrength V8.1', 'tf': '1H/4H', 'style': 'Fuerza Relativa (ROC 15d)',
+        'name': 'B2 RelStrength V8.2', 'tf': '1H/4H', 'style': 'Fuerza Relativa (ROC 15d)',
         'symbols': ['ETHUSDT', 'RENDERUSDT', 'UNIUSDT', 'TAOUSDT', 'HYPEUSDT', 'XAGUSDT', 'CLUSDT', 'NVDAUSDT'],
         'phase_a': {'roi': 44.05, 'pnl': 440.50, 'wr': 52.0, 'sharpe': 1.65, 'mdd': 16.5, 'pf': 1.34, 'trades': 38},
         'phase_b': {'roi': 44.05, 'pnl': 440.50, 'wr': 52.0, 'sharpe': 1.65, 'mdd': 16.5, 'pf': 1.34, 'trades': 38},
     },
     'B3': {
-        'name': 'B3 Wyckoff Vault V8.1', 'tf': '4H/1D', 'style': 'Anti-Degradación Wyckoff',
+        'name': 'B3 Wyckoff Vault V8.2', 'tf': '4H/1D', 'style': 'Anti-Degradación Wyckoff',
         'symbols': ['BTCUSDT', 'PAXGUSDT', 'COPPERUSDT', 'SPYUSDT', 'QQQUSDT'],
         'phase_a': {'roi': 50.05, 'pnl': 500.50, 'wr': 63.2, 'sharpe': 2.15, 'mdd': 11.8, 'pf': 1.51, 'trades': 19},
         'phase_b': {'roi': 50.05, 'pnl': 500.50, 'wr': 63.2, 'sharpe': 2.15, 'mdd': 11.8, 'pf': 1.51, 'trades': 19},
@@ -109,7 +109,7 @@ class TelegramInterface:
         await message.answer(
             "🚀 *Antigravity Trifecta V8 Bot*\n\n"
             "Bot de trading automático con 3 motores Campeones V8:\n"
-            "• B1 Range Grid V8 (5m/15m) — ADX < 25\n"
+            "• B1 Range Grid V8.2 (5m/15m) — ADX < 25\n"
             "• B2 RelStrength V8 (1h/4h) — ROC 15d\n"
             "• B3 Wyckoff Vault V8 (4h/1d) — Anti-Degradación\n\n"
             "Usa /demo para ver tu Portafolio Demo V8 en vivo o /help para todos los comandos.",
@@ -631,9 +631,9 @@ class TelegramInterface:
             logger.error(f"Error in cmd_analista: {e}")
 
     async def cmd_demo(self, message: types.Message):
-        """Ejecuta un escaneo en vivo V8.1 y devuelve el panel completo del Portafolio Demo Trifecta."""
+        """Ejecuta un escaneo en vivo V8.2 y devuelve el panel completo del Portafolio Demo Trifecta."""
         try:
-            await message.answer("📡 *Escaneando 16 activos en Binance Futures (B1 + B2 + B3 V8.1 Cartera Propia)...*", parse_mode="Markdown")
+            await message.answer("📡 *Escaneando 16 activos en Binance Futures (B1 + B2 + B3 V8.2 Cartera Propia)...*", parse_mode="Markdown")
             import demo_trifecta_2026 as demo
             state = demo.load_state()
             await asyncio.to_thread(demo.run_live_scan, state)
