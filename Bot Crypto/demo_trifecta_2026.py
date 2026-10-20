@@ -634,7 +634,7 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
     events.extend(sync_events)
 
     if events:
-        tg_msg = "⚡ ACTUALIZACIÓN DEMO TRIFECTA V8.1:\n" + "\n".join(f"• {e}" for e in events[:8])
+        tg_msg = "⚡ ACTUALIZACIÓN DEMO TRIFECTA V8.2:\n" + "\n".join(f"• {e}" for e in events[:8])
         send_telegram_alert(tg_msg)
 
     state["scans_completed"] = state.get("scans_completed", 0) + 1
@@ -645,7 +645,7 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
 def print_dashboard(state: Dict, scan_result: Optional[Dict] = None):
     """Imprime el panel ejecutivo de la Demo en consola."""
     print("\n" + "═" * 100)
-    print(f"🏦 PANEL DEMO EN VIVO BINANCE FUTURES — ARQUITECTURA TRIFECTA 2026 (V8.1 CARTERA PROPIA)")
+    print(f"🏦 PANEL DEMO EN VIVO BINANCE FUTURES — ARQUITECTURA TRIFECTA 2026 (V8.2 CARTERA PROPIA)")
     print(f"🕒 Actualizado: {state['last_updated']} | Escaneos: {state['scans_completed']} | Régimen Macro B3: {state.get('global_regime', 'NORMAL')}")
     print("═" * 100)
 
@@ -695,7 +695,7 @@ def print_dashboard(state: Dict, scan_result: Optional[Dict] = None):
         else:
             print("\nℹ️ Sin cierres ni nuevas aperturas en este segundo exacto.")
 
-        print("\n📡 RADAR EN TIEMPO REAL DE LOS 16 ACTIVOS EN BINANCE FUTURES (V8.1):")
+        print("\n📡 RADAR EN TIEMPO REAL DE LOS 16 ACTIVOS EN BINANCE FUTURES (V8.2):")
         for key in ("B1", "B2", "B3"):
             print(f"\n  [{key} — {state['engines'][key]['motor_id']}]")
             for d in scan_result["diagnostics"][key]:
@@ -723,7 +723,7 @@ def _send_tg_message(tok: str, chat_id: str, text: str):
 
 def _build_demo_telegram_text(state: Dict) -> str:
     lines = [
-        "🏦 *PORTAFOLIO DEMO TRIFECTA V8.1 (CARTERA PROPIA)*",
+        "🏦 *PORTAFOLIO DEMO TRIFECTA V8.2 (CARTERA PROPIA)*",
         f"🕒 `{state['last_updated']}` | Escaneos: `{state.get('scans_completed', 0)}` | Régimen: *{state.get('global_regime', 'NORMAL')}*\n"
     ]
     tot_init, tot_eq = 0.0, 0.0
@@ -737,8 +737,9 @@ def _build_demo_telegram_text(state: Dict) -> str:
         max_slots = 3 if k == "B1" else 4
         lines.append(f"🔹 *{k}* (`{eng['motor_id']}`): `${eq:,.2f}` (`{roi:+.2f}%`) | Abiertas: `{len(eng['open_positions'])}/{max_slots}`")
         for sym, p in eng["open_positions"].items():
+            ptp_tag = " `[50% Cobrado 💰]`" if p.get("partial_tp_taken") else ""
             lines.append(
-                f"   • `{p['side']}` *{sym}*: `${p['entry_price']:,.4f}` → `${p['current_price']:,.4f}` "
+                f"   • `{p['side']}` *{sym}*{ptp_tag}: `${p['entry_price']:,.4f}` → `${p['current_price']:,.4f}` "
                 f"| SL: `${p['stop_loss']:,.4f}` | PnL: `${p['unrealized_pnl']:+,.2f}` (`{p['unrealized_pnl_pct']:+.2f}%`)"
             )
     tot_roi = ((tot_eq - tot_init) / tot_init) * 100.0 if tot_init > 0 else 0.0
@@ -808,7 +809,7 @@ def process_pending_telegram_commands(offset_holder: List[int]):
 
             cmd = text.split()[0].lower().split("@")[0]
             if cmd in ("/demo", "/status", "/positions", "/pnl", "/balance"):
-                _send_tg_message(tok, chat_id, "📡 *Actualizando precios en vivo de los 16 activos en Binance Futures (V8.1)...*")
+                _send_tg_message(tok, chat_id, "📡 *Actualizando precios en vivo de los 16 activos en Binance Futures (V8.2)...*")
                 st = load_state()
                 run_live_scan(st)
                 _send_tg_message(tok, chat_id, _build_demo_telegram_text(st))
