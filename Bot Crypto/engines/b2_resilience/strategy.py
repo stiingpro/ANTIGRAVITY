@@ -130,12 +130,16 @@ class B2Strategy:
         if adx_4h < 18.0:
             return None
 
-        # Fuerza Relativa (ROC de 7 días = 42 velas 4H, ROC de 15 días = 90 velas 4H)
+        # Fuerza Relativa (ROC 48h = 12 velas 4H, ROC 7d = 42 velas 4H, ROC 15d = 90 velas 4H)
+        roc_2d = (price_4h / closes_4h[-12] - 1.0) * 100.0 if len(closes_4h) >= 12 else 0.0
         roc_7d = (price_4h / closes_4h[-42] - 1.0) * 100.0 if len(closes_4h) >= 42 else 0.0
         roc_15d = (price_4h / closes_4h[-90] - 1.0) * 100.0 if len(closes_4h) >= 90 else 0.0
 
-        macro_bullish = price_4h > ema50_4h and (price_4h > ema200_4h or roc_15d > 6.0)
-        macro_bearish = price_4h < ema50_4h and price_4h < ema200_4h
+        # V8.2 Filtro Anti-Rebote en "V": detecta TANTO tendencia 15d COMO giros institucionales 48h (roc_2d >= +4.0%)
+        v_recovery_bull = (roc_2d >= 4.0 and price_4h > ema20_4h)
+        macro_bullish = (price_4h > ema50_4h and (price_4h > ema200_4h or roc_15d > 6.0)) or v_recovery_bull
+        # Prohibir sesgo bajista si el activo lleva >= +2.8% de rebote en V en las últimas 48h
+        macro_bearish = (price_4h < ema50_4h and price_4h < ema200_4h) and (roc_2d < 2.8)
         macro_dist_pct = abs(price_4h - ema200_4h) / ema200_4h * 100 if ema200_4h > 0 else 0
         
         # ========== V8: SELECCIÓN DINÁMICA DE PARAMS ==========
@@ -179,11 +183,11 @@ class B2Strategy:
         
         prec = self._price_precision(symbol)
         
-        # ========== SCORING LONG (FUERZA RELATIVA ALCISTA) ==========
+        # ========== SCORING LONG (FUERZA RELATIVA ALCISTA O GIRO EN V 48H) ==========
         long_score = 0.0
         long_reasons = []
         
-        if macro_bullish and roc_15d > 4.0:
+        if macro_bullish and (roc_15d > 4.0 or roc_2d >= 4.0) and roc_2d > -2.8:
             if bullish_cross:
                 long_score += 0.35
                 long_reasons.append("EMA20x50↑")
@@ -197,6 +201,12 @@ class B2Strategy:
             elif roc_15d >= 5.0:
                 long_score += 0.15
                 long_reasons.append(f"ROC15d=+{roc_15d:.1f}%")
+            elif roc_2d >= 6.0:
+                long_score += 0.25
+                long_reasons.append(f"V-Rebote48h=+{roc_2d:.1f}%")
+            elif roc_2d >= 4.0:
+                long_score += 0.15
+                long_reasons.append(f"V-Rebote48h=+{roc_2d:.1f}%")
 
             if rsi_long_min <= rsi <= rsi_long_max:
                 long_score += 0.20
@@ -210,11 +220,11 @@ class B2Strategy:
                 long_score -= 0.25
                 long_reasons.append("RSIdiv↓ ⚠️")
         
-        # ========== SCORING SHORT (DEBILIDAD RELATIVA BAJISTA) ==========
+        # ========== SCORING SHORT (DEBILIDAD RELATIVA BAJISTA — BLOQUEADO SI REBOTE 48H >= +2.8%) ==========
         short_score = 0.0
         short_reasons = []
         
-        if macro_bearish and roc_15d < -4.0:
+        if macro_bearish and roc_15d < -4.0 and roc_2d < 2.8:
             if bearish_cross:
                 short_score += 0.35
                 short_reasons.append("EMA20x50↓")

@@ -292,8 +292,45 @@ def update_and_check_positions(engine_key: str, eng_state: Dict, live_prices: Di
         pnl_pct = round((net_pnl / pos["margin"]) * 100, 2) if pos["margin"] > 0 else 0.0
         pos["unrealized_pnl_pct"] = pnl_pct
 
-        # ─── V8.1 MEJORA 1: CANDADO AUTOMÁTICO DE GANANCIAS (Auto-Breakeven & Trailing Escalón) ───
+        # ─── V8.2 MEJORA 1: COBRO PARCIAL 50% (+4.0% ROI) + CANDADO DE GANANCIAS ESCALONADO ───
         if not hit_tp and not hit_sl:
+            # 1A. Si alcanza >= +4.0% sobre margen y aún no ha cobrado el 50% parcial, cobrar 50% a la caja
+            if pnl_pct >= 4.0 and not pos.get("partial_tp_taken", False):
+                half_pnl = round(net_pnl * 0.5, 2)
+                half_qty = round(qty * 0.5, 4)
+                half_margin = round(pos["margin"] * 0.5, 2)
+                half_notional = round(notional * 0.5, 2)
+
+                eng_state["cash_balance"] = round(eng_state["cash_balance"] + half_pnl, 2)
+                eng_state["realized_pnl"] = round(eng_state["realized_pnl"] + half_pnl, 2)
+                eng_state["wins"] += 1
+                eng_state["closed_trades"].append({
+                    "symbol": sym,
+                    "side": side,
+                    "entry_price": entry,
+                    "exit_price": price,
+                    "net_pnl": half_pnl,
+                    "reason_entry": pos["reason"],
+                    "reason_exit": "PARTIAL_TP_50%_V8.2",
+                    "opened_at": pos["opened_at"],
+                    "closed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
+
+                pos["quantity"] = round(qty - half_qty, 4)
+                pos["margin"] = round(pos["margin"] - half_margin, 2)
+                pos["notional"] = round(notional - half_notional, 2)
+                pos["unrealized_pnl"] = round(net_pnl - half_pnl, 2)
+                pos["partial_tp_taken"] = True
+                qty = pos["quantity"]
+                notional = pos["notional"]
+                fee_est = notional * TAKER_FEE * 2
+
+                events.append(
+                    f"[{engine_key}] 💰 COBRO PARCIAL 50% V8.2 en {sym} {side} @ ${price:,.4f} -> "
+                    f"Ganancia Embolsada: ${half_pnl:+,.2f} (50% restante corre libre)"
+                )
+
+            # 1B. Candado de Stop Loss sobre la posición restante
             old_sl = pos["stop_loss"]
             if pnl_pct >= 8.0:
                 # Escalón 2 (+8% ROI sobre margen) -> Asegurar +4.5% sobre margen
@@ -309,23 +346,27 @@ def update_and_check_positions(engine_key: str, eng_state: Dict, live_prices: Di
                         pos["stop_loss"] = new_sl
                         events.append(f"[{engine_key}] 🔒 CANDADO NIVEL 2 (+4.5% asegurado) en {sym} {side}: SL bajado a ${new_sl:,.4f}")
             elif pnl_pct >= 4.0:
-                # Escalón 1 (+4% ROI sobre margen) -> Asegurar Breakeven Positivo (+0.6% sobre margen)
-                lock_move = 0.006 / lev
+                # Escalón 1 (+4% ROI sobre margen) -> Asegurar Breakeven Positivo (+1.0% sobre margen)
+                lock_move = 0.010 / lev
                 if side in ("LONG", "BUY"):
                     new_sl = round(entry * (1.0 + lock_move), 4)
                     if new_sl > old_sl:
                         pos["stop_loss"] = new_sl
-                        events.append(f"[{engine_key}] 🛡️ CANDADO BREAKEVEN (+0.6% asegurado) en {sym} {side}: SL protegido en ${new_sl:,.4f}")
+                        events.append(f"[{engine_key}] 🛡️ CANDADO BREAKEVEN (+1.0% asegurado) en {sym} {side}: SL protegido en ${new_sl:,.4f}")
                 else:
                     new_sl = round(entry * (1.0 - lock_move), 4)
                     if old_sl == 0 or new_sl < old_sl:
                         pos["stop_loss"] = new_sl
-                        events.append(f"[{engine_key}] 🛡️ CANDADO BREAKEVEN (+0.6% asegurado) en {sym} {side}: SL protegido en ${new_sl:,.4f}")
+                        events.append(f"[{engine_key}] 🛡️ CANDADO BREAKEVEN (+1.0% asegurado) en {sym} {side}: SL protegido en ${new_sl:,.4f}")
 
         if hit_tp:
-            to_close.append((sym, price, "TAKE_PROFIT", net_pnl))
+            tp_p = pos["take_profit"]
+            raw_tp = ((tp_p - entry) * qty) if side in ("LONG", "BUY") else ((entry - tp_p) * qty)
+            to_close.append((sym, tp_p, "TAKE_PROFIT", raw_tp - fee_est))
         elif hit_sl:
-            to_close.append((sym, price, "STOP_LOSS", net_pnl))
+            sl_p = pos["stop_loss"]
+            raw_sl = ((sl_p - entry) * qty) if side in ("LONG", "BUY") else ((entry - sl_p) * qty)
+            to_close.append((sym, sl_p, "STOP_LOSS", raw_sl - fee_est))
 
     for sym, close_price, close_reason, net_pnl in to_close:
         pos = eng_state["open_positions"].pop(sym)
@@ -473,9 +514,67 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
     state["global_regime"] = getattr(B3AnchorEngine, "GLOBAL_REGIME", "NORMAL")
     events.extend(update_and_check_positions("B3", b3_state, live_prices))
 
-    # ─── 2. ESCANEO MOTOR B1 (Grid Dinámico & Reversión en Rango ADX < 25 + Escudo Bajista B2) ───
-    b1_state = state["engines"]["B1"]
+    # ─── 2. ESCANEO MOTOR B2 (Primero B2 antes que B1 para actualizar conteo real de SHORTs y ROC 48h) ───
     b2_state = state["engines"]["B2"]
+    b2_candidates = []
+    for sym in B2ResilienceEngine.CONFIG["symbols"]:
+        try:
+            klines_1h = fetch_binance_klines(sym, "1h", limit=70)
+            klines_4h = fetch_binance_klines(sym, "4h", limit=220)
+            price = float(klines_1h[-1][4])
+            live_prices[sym] = price
+
+            closes_4h = [float(k[4]) for k in klines_4h]
+            highs_4h = [float(k[2]) for k in klines_4h]
+            lows_4h = [float(k[3]) for k in klines_4h]
+
+            roc_2d = ((closes_4h[-1] / closes_4h[-12]) - 1.0) * 100.0 if len(closes_4h) >= 12 else 0.0
+            roc_15d = ((closes_4h[-1] / closes_4h[-90]) - 1.0) * 100.0 if len(closes_4h) >= 90 else 0.0
+            adx_4h = b2_strat._adx(highs_4h, lows_4h, closes_4h, 14)
+
+            data_1h = {"symbol": sym, "klines": klines_1h, "price": price, "timeframe": "1h"}
+            data_4h = {"symbol": sym, "klines": klines_4h, "price": price, "timeframe": "4h"}
+
+            sig = b2_strat.analyze(data_1h, data_4h)
+            if roc_15d < -4.0 and roc_2d >= 2.8:
+                status_txt = f"FILTRO V-REBOTE 48H (+{roc_2d:.1f}% bloquea SHORT)"
+            elif sig:
+                status_txt = f"SEÑAL {sig.side.name} (Score {sig.strength:.2f}): {sig.reason}"
+                b2_candidates.append((max(abs(roc_15d), abs(roc_2d)), sig))
+            else:
+                status_txt = f"Monitoreando (ROC15d={roc_15d:+.1f}%, 48h={roc_2d:+.1f}%)"
+
+            diagnostics["B2"].append({
+                "symbol": sym,
+                "price": price,
+                "metric_1": f"ROC15d:{roc_15d:+.1f}%",
+                "metric_2": f"48h:{roc_2d:+.1f}% | ADX:{adx_4h:.1f}",
+                "filter": "ADX > 18 & Anti-V 48h",
+                "status": status_txt
+            })
+        except Exception as e:
+            diagnostics["B2"].append({
+                "symbol": sym, "price": 0.0,
+                "metric_1": "ERR", "metric_2": str(e)[:30],
+                "filter": "-", "status": "Error de conexión"
+            })
+
+    # Primero actualizar y aplicar Cobro Parcial 50% + Candados V8.2 en B2 antes de evaluar nuevos cupos y antes de correr B1
+    events.extend(update_and_check_positions("B2", b2_state, live_prices))
+
+    # Ordenar candidatos de B2 por mayor Fuerza Relativa para entrar primero en los líderes
+    b2_candidates.sort(key=lambda x: x[0], reverse=True)
+    for _, sig in b2_candidates:
+        ev = open_demo_position(
+            "B2", b2_state, sig.symbol, sig.side.name, sig.entry_price,
+            sig.stop_loss, sig.take_profit,
+            leverage=sig.leverage, margin_pct=20.0, reason=sig.reason, max_open=4
+        )
+        if ev:
+            events.append(ev)
+
+    # ─── 3. ESCANEO MOTOR B1 (Grid Dinámico & Reversión en Rango ADX < 25 + Escudo Bajista B2) ───
+    b1_state = state["engines"]["B1"]
     b2_active_shorts = sum(1 for p in b2_state["open_positions"].values() if p.get("side") == "SHORT")
     b1_strat.b2_bear_shield = (b2_active_shorts >= 3)
 
@@ -529,60 +628,6 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
             })
 
     events.extend(update_and_check_positions("B1", b1_state, live_prices))
-
-    # ─── 3. ESCANEO MOTOR B2 (Rotación Institucional por Fuerza Relativa ROC 15d) ───
-    b2_candidates = []
-    for sym in B2ResilienceEngine.CONFIG["symbols"]:
-        try:
-            klines_1h = fetch_binance_klines(sym, "1h", limit=70)
-            klines_4h = fetch_binance_klines(sym, "4h", limit=220)
-            price = float(klines_1h[-1][4])
-            live_prices[sym] = price
-
-            closes_4h = [float(k[4]) for k in klines_4h]
-            highs_4h = [float(k[2]) for k in klines_4h]
-            lows_4h = [float(k[3]) for k in klines_4h]
-
-            roc_15d = ((closes_4h[-1] / closes_4h[-90]) - 1.0) * 100.0 if len(closes_4h) >= 90 else 0.0
-            adx_4h = b2_strat._adx(highs_4h, lows_4h, closes_4h, 14)
-
-            data_1h = {"symbol": sym, "klines": klines_1h, "price": price, "timeframe": "1h"}
-            data_4h = {"symbol": sym, "klines": klines_4h, "price": price, "timeframe": "4h"}
-
-            sig = b2_strat.analyze(data_1h, data_4h)
-            status_txt = f"Monitoreando (ROC15d={roc_15d:+.1f}%, ADX={adx_4h:.1f})"
-            if sig:
-                status_txt = f"SEÑAL {sig.side.name} (Score {sig.strength:.2f}): {sig.reason}"
-                b2_candidates.append((abs(roc_15d), sig))
-
-            diagnostics["B2"].append({
-                "symbol": sym,
-                "price": price,
-                "metric_1": f"ROC(15d): {roc_15d:+.1f}%",
-                "metric_2": f"ADX(4H): {adx_4h:.1f}",
-                "filter": "ADX > 18 & |ROC15d| > 3.5%",
-                "status": status_txt
-            })
-        except Exception as e:
-            diagnostics["B2"].append({
-                "symbol": sym, "price": 0.0,
-                "metric_1": "ERR", "metric_2": str(e)[:30],
-                "filter": "-", "status": "Error de conexión"
-            })
-
-    # Primero actualizar y aplicar Candados de Ganancias V8.1 en B2 antes de evaluar nuevos cupos
-    events.extend(update_and_check_positions("B2", b2_state, live_prices))
-
-    # Ordenar candidatos de B2 por mayor Fuerza Relativa (ROC 15d) para entrar primero en los líderes
-    b2_candidates.sort(key=lambda x: x[0], reverse=True)
-    for _, sig in b2_candidates:
-        ev = open_demo_position(
-            "B2", b2_state, sig.symbol, sig.side.name, sig.entry_price,
-            sig.stop_loss, sig.take_profit,
-            leverage=sig.leverage, margin_pct=20.0, reason=sig.reason, max_open=4
-        )
-        if ev:
-            events.append(ev)
 
     # ─── 4. SINCRONIZAR CON LAS 3 API KEYS DE BINANCE DEMO TRADING (B1/B2/B3_TESTNET) ───
     sync_events = sync_positions_to_binance_demo_api(state)
