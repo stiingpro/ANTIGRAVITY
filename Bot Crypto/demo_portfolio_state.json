@@ -1,7 +1,7 @@
 {
   "created_at": "2026-10-14 22:37:44",
-  "last_updated": "2026-10-20 18:27:11",
-  "scans_completed": 24,
+  "last_updated": "2026-10-21 12:26:49",
+  "scans_completed": 26,
   "global_regime": "BULL",
   "engines": {
     "B1": {
@@ -13,26 +13,26 @@
         "LINKUSDT"
       ],
       "initial_capital": 600.0,
-      "cash_balance": 588.29,
-      "realized_pnl": -11.71,
+      "cash_balance": 585.34,
+      "realized_pnl": -14.66,
       "wins": 2,
-      "losses": 4,
+      "losses": 5,
       "open_positions": {
-        "LINKUSDT": {
-          "symbol": "LINKUSDT",
+        "BNBUSDT": {
+          "symbol": "BNBUSDT",
           "side": "SHORT",
-          "entry_price": 12.297,
-          "current_price": 12.297,
-          "quantity": 28.7046,
+          "entry_price": 748.88,
+          "current_price": 749.75,
+          "quantity": 0.4713,
           "margin": 117.66,
           "leverage": 3,
           "notional": 352.98,
-          "stop_loss": 12.39,
-          "take_profit": 12.12,
-          "unrealized_pnl": -0.28,
-          "unrealized_pnl_pct": -0.24,
-          "reason": "RangeGrid SHORT: ADX=17.8 Z=2.07 RSI=61.7",
-          "opened_at": "2026-10-20 18:26:58"
+          "stop_loss": 752.56,
+          "take_profit": 744.09,
+          "unrealized_pnl": -0.69,
+          "unrealized_pnl_pct": -0.59,
+          "reason": "RangeGrid SHORT: ADX=24.2 Z=2.46 RSI=60.8",
+          "opened_at": "2026-10-21 12:24:46"
         }
       },
       "closed_trades": [
@@ -101,6 +101,17 @@
           "reason_exit": "STOP_LOSS",
           "opened_at": "2026-10-14 23:36:46",
           "closed_at": "2026-10-18 18:16:41"
+        },
+        {
+          "symbol": "LINKUSDT",
+          "side": "SHORT",
+          "entry_price": 12.297,
+          "exit_price": 12.39,
+          "net_pnl": -2.95,
+          "reason_entry": "RangeGrid SHORT: ADX=17.8 Z=2.07 RSI=61.7",
+          "reason_exit": "STOP_LOSS",
+          "opened_at": "2026-10-20 18:26:58",
+          "closed_at": "2026-10-21 12:24:46"
         }
       ]
     },
@@ -118,29 +129,11 @@
         "NVDAUSDT"
       ],
       "initial_capital": 1200.0,
-      "cash_balance": 1207.12,
-      "realized_pnl": 7.12,
+      "cash_balance": 1196.06,
+      "realized_pnl": -3.94,
       "wins": 3,
-      "losses": 1,
-      "open_positions": {
-        "CLUSDT": {
-          "symbol": "CLUSDT",
-          "side": "LONG",
-          "entry_price": 99.25,
-          "current_price": 98.28,
-          "quantity": 7.2296,
-          "margin": 239.18,
-          "leverage": 3,
-          "notional": 717.54,
-          "stop_loss": 97.8,
-          "take_profit": 102.16,
-          "unrealized_pnl": -7.59,
-          "unrealized_pnl_pct": -3.17,
-          "reason": "RelStrength>EMA20 + ROC15d=+9.0% + RSI=65 + Vol✓",
-          "opened_at": "2026-10-18 18:52:45",
-          "binance_demo_note": "Simulado localmente"
-        }
-      },
+      "losses": 2,
+      "open_positions": {},
       "closed_trades": [
         {
           "symbol": "XAGUSDT",
@@ -185,6 +178,17 @@
           "reason_exit": "CANDADO_PROFIT_LOCK_V8.1",
           "opened_at": "2026-10-15 16:28:55",
           "closed_at": "2026-10-20 17:52:09"
+        },
+        {
+          "symbol": "CLUSDT",
+          "side": "LONG",
+          "entry_price": 99.25,
+          "exit_price": 97.8,
+          "net_pnl": -11.06,
+          "reason_entry": "RelStrength>EMA20 + ROC15d=+9.0% + RSI=65 + Vol✓",
+          "reason_exit": "STOP_LOSS",
+          "opened_at": "2026-10-18 18:52:45",
+          "closed_at": "2026-10-21 12:24:44"
         }
       ]
     },
@@ -199,40 +203,24 @@
         "QQQUSDT"
       ],
       "initial_capital": 1200.0,
-      "cash_balance": 1191.45,
-      "realized_pnl": -8.55,
-      "wins": 1,
+      "cash_balance": 1207.09,
+      "realized_pnl": 7.09,
+      "wins": 2,
       "losses": 1,
       "open_positions": {
-        "BTCUSDT": {
-          "symbol": "BTCUSDT",
-          "side": "LONG",
-          "entry_price": 81810.9,
-          "current_price": 82881.9,
-          "quantity": 0.0061,
-          "margin": 250.0,
-          "leverage": 2,
-          "notional": 500.0,
-          "stop_loss": 78947.5185,
-          "take_profit": 93264.426,
-          "unrealized_pnl": 6.13,
-          "unrealized_pnl_pct": 2.45,
-          "reason": "Wyckoff Spring 4H (RSI=38.1, Z=-1.88)",
-          "opened_at": "2026-10-14 22:37:45"
-        },
         "COPPERUSDT": {
           "symbol": "COPPERUSDT",
           "side": "LONG",
           "entry_price": 6.643,
-          "current_price": 6.629,
+          "current_price": 6.583,
           "quantity": 75.2672,
           "margin": 250.0,
           "leverage": 2,
           "notional": 500.0,
           "stop_loss": 6.4105,
           "take_profit": 7.573,
-          "unrealized_pnl": -1.45,
-          "unrealized_pnl_pct": -0.58,
+          "unrealized_pnl": -4.92,
+          "unrealized_pnl_pct": -1.97,
           "reason": "Wyckoff Spring 4H (RSI=33.6, Z=-2.45)",
           "opened_at": "2026-10-14 22:37:47",
           "binance_demo_note": "Simulado localmente"
@@ -241,15 +229,15 @@
           "symbol": "SPYUSDT",
           "side": "LONG",
           "entry_price": 768.49,
-          "current_price": 772.64,
+          "current_price": 772.68,
           "quantity": 0.6506,
           "margin": 250.0,
           "leverage": 2,
           "notional": 500.0,
           "stop_loss": 741.5928,
           "take_profit": 876.0786,
-          "unrealized_pnl": 2.3,
-          "unrealized_pnl_pct": 0.92,
+          "unrealized_pnl": 2.33,
+          "unrealized_pnl_pct": 0.93,
           "reason": "Wyckoff Spring 4H (RSI=23.3, Z=-2.73)",
           "opened_at": "2026-10-14 22:37:48",
           "binance_demo_note": "Simulado localmente"
@@ -258,15 +246,15 @@
           "symbol": "QQQUSDT",
           "side": "LONG",
           "entry_price": 706.08,
-          "current_price": 723.1,
+          "current_price": 725.42,
           "quantity": 0.2795,
           "margin": 98.68,
           "leverage": 2,
           "notional": 197.37,
           "stop_loss": 709.6104,
           "take_profit": 804.9312,
-          "unrealized_pnl": 4.6,
-          "unrealized_pnl_pct": 4.66,
+          "unrealized_pnl": 5.25,
+          "unrealized_pnl_pct": 5.32,
           "reason": "Wyckoff Spring 4H (RSI=24.6, Z=-1.07)",
           "opened_at": "2026-10-18 18:18:12",
           "binance_demo_note": "Simulado localmente",
@@ -295,6 +283,17 @@
           "reason_exit": "PARTIAL_TP_50%_V8.2",
           "opened_at": "2026-10-18 18:18:12",
           "closed_at": "2026-10-20 18:26:50"
+        },
+        {
+          "symbol": "BTCUSDT",
+          "side": "LONG",
+          "entry_price": 81810.9,
+          "exit_price": 84440.4,
+          "net_pnl": 15.64,
+          "reason_entry": "Wyckoff Spring 4H (RSI=38.1, Z=-1.88)",
+          "reason_exit": "EXIT_LONG_STRENGTH",
+          "opened_at": "2026-10-14 22:37:45",
+          "closed_at": "2026-10-21 12:24:41"
         }
       ]
     }

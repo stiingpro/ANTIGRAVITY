@@ -486,6 +486,17 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
                         b3_state["wins"] += 1
                     else:
                         b3_state["losses"] += 1
+                    b3_state["closed_trades"].append({
+                        "symbol": sym,
+                        "side": pos["side"],
+                        "entry_price": pos["entry_price"],
+                        "exit_price": price,
+                        "net_pnl": round(net_pnl, 2),
+                        "reason_entry": pos["reason"],
+                        "reason_exit": "EXIT_LONG_STRENGTH",
+                        "opened_at": pos["opened_at"],
+                        "closed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
                     events.append(f"[B3] SALIDA EN FORTALEZA {sym} @ ${price:,.2f} -> PnL: ${net_pnl:+,.2f}")
                 elif sig.side == "LONG":
                     ev = open_demo_position(
