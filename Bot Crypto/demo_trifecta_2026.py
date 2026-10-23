@@ -609,8 +609,6 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
             sig = b1_strat.analyze(data_5m, data_15m)
             if adx_15m >= 25.0:
                 status_txt = f"PAUSADO POR TENDENCIA FUERTE (ADX {adx_15m:.1f} >= 25)"
-            elif b1_strat.b2_bear_shield:
-                status_txt = f"ESCUDO BAJISTA B2 ACTIVO ({b2_active_shorts} SHORTs en B2 bloquean LONGs)"
             elif sig:
                 status_txt = f"SEÑAL {sig.side.name}: {sig.reason}"
                 ev = open_demo_position(
@@ -620,6 +618,8 @@ def run_live_scan(state: Dict, allow_watch_entry: bool = False) -> Dict:
                 )
                 if ev:
                     events.append(ev)
+            elif b1_strat.b2_bear_shield and z_15m <= -1.45:
+                status_txt = f"ESCUDO BAJISTA B2 ACTIVO ({b2_active_shorts} SHORTs en B2 bloquean LONGs)"
             else:
                 status_txt = f"RANGO ACTIVO (Esperando |Z|>=1.45, actual {z_15m:+.2f})"
 
